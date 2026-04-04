@@ -1,0 +1,104 @@
+name: ESP32 std Auto Build
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # 1. 基础 Rust 环境（不预设 target，由后续脚本动态添加）
+      - name: Setup Rust Toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      # 2. 使用 cargo-binstall 加速安装工具链
+      - name: Install cargo-binstall
+        uses: cargo-bins/cargo-binstall@main
+      - name: Install espflash
+        run: cargo binstall --no-confirm espflash
+
+      # 3. 自动检测 MCU 与 Target，并统一处理 "_" 和 "-"
+      - name: Detect MCU & Target
+        id: detect
+        run: |
+          # 优先从 .cargo/config.toml 读取 target
+          TARGET=$(grep -oP 'target\s*=\s*"\K[^"]+' .cargo/config.toml 2>/dev/null | head -n 1)
+          
+          # 若未配置，尝试从 Cargo.toml features 推断标准库常用 target
+          if [ -z "$TARGET" ]; then
+            FEATURE=$(grep -oP '^\s*esp32\w*\s*=' Cargo.toml | head -n 1 | sed 's/\s*=\s*//')
+            case "$FEATURE" in
+              esp32)   TARGET="xtensa-esp32-espidf" ;;
+              esp32s2) TARGET="xtensa-esp32s2-espidf" ;;
+              esp32s3) TARGET="xtensa-esp32s3-espidf" ;;
+              esp32c3) TARGET="riscv32imc-esp-espidf" ;;
+              esp32c6) TARGET="riscv32imac-esp-espidf" ;;
+              esp32h2) TARGET="riscv32imac-esp-espidf" ;;
+              *)       TARGET="xtensa-esp32-espidf" ;;
+            esac
+          fi
+
+          # 提取芯片型号 (如 esp32, esp32s3)
+          CHIP=$(echo "$TARGET" | grep -oP 'esp32\w*' | head -n 1)
+          [ -z "$CHIP" ] && CHIP="esp32"
+
+          # 提取 crate 名称
+          CRATE_NAME=$(grep -m1 '^name = ' Cargo.toml | sed 's/name = "//;s/"//')
+          [ -z "$CRATE_NAME" ] && CRATE_NAME="app"
+
+          # 🛠 核心处理：统一将文件名和芯片名中的 "-" 替换为 "_"，避免构建产物命名混乱
+          SANITIZED_CHIP=$(echo "$CHIP" | tr '-' '_')
+          SANITIZED_BIN=$(echo "$CRATE_NAME" | tr '-' '_')
+
+          echo "target=$TARGET" >> $GITHUB_OUTPUT
+          echo "chip=$CHIP" >> $GITHUB_OUTPUT
+          echo "sanitized_chip=$SANITIZED_CHIP" >> $GITHUB_OUTPUT
+          echo "sanitized_bin=$SANITIZED_BIN" >> $GITHUB_OUTPUT
+
+      # 动态添加检测到的 target
+      - name: Add Detected Target
+        run: rustup target add ${{ steps.detect.outputs.target }}
+
+      # 缓存加速二次构建
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-
+
+      # 4. 编译
+      - name: Build Project
+        run: cargo build --release --target ${{ steps.detect.outputs.target }}
+
+      # 5. 生成融合 bin (0x0 直接可用)
+      - name: Generate Merged Binary
+        run: |
+          # 智能定位 ELF 文件（兼容 cargo 输出的不同后缀）
+          ELF_PATH=$(find target/${{ steps.detect.outputs.target }}/release \
+            -maxdepth 1 \( -name "${{ steps.detect.outputs.sanitized_bin }}" -o -name "${{ steps.detect.outputs.sanitized_bin }}.elf" \) | head -n 1)
+          
+          if [ -z "$ELF_PATH" ]; then
+            echo "::error::未找到编译生成的 ELF 文件，请检查 Cargo.toml 或构建日志"
+            exit 1
+          fi
+
+          # 使用 espflash 生成合并后的单文件镜像
+          espflash save-image --merge --chip ${{ steps.detect.outputs.chip }} \
+            "$ELF_PATH" ${{ steps.detect.outputs.sanitized_chip }}_firmware.bin
+
+      # 6. 上传构建产物（公开仓库默认公开可见）
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: firmware-${{ steps.detect.outputs.sanitized_chip }}
+          path: ${{ steps.detect.outputs.sanitized_chip }}_firmware.bin
+          retention-days: 90

@@ -5,6 +5,7 @@ on:
     branches: ["main", "master"]
   pull_request:
     branches: ["main", "master"]
+  workflow_dispatch: # 允许在 GitHub Actions 页面手动点击运行
 
 jobs:
   build:
@@ -27,11 +28,11 @@ jobs:
           if [ -z "$CHIP" ]; then
             CHIP=$(echo "$TARGET" | grep -oP '(esp32|esp32s[23]|esp32c[236]|esp32h2|esp32p4)' | head -n 1)
           fi
-          # 确保芯片名没有下划线
+          # 确保芯片名没有下划线 (防止某些配置写成 esp32_c6)
           CHIP=$(echo "$CHIP" | tr '_' '-')
           echo "CHIP=$CHIP" >> "$GITHUB_OUTPUT"
 
-          # 3) 提取二进制文件名（Cargo 会把 - 换成 _）
+          # 3) 提取二进制文件名（Cargo 编译时会把 name 里的 - 换成 _）
           CRATE_NAME=$(grep -oP '^\s*name\s*=\s*"\K[^"]+' Cargo.toml | head -n 1 | tr '-' '_')
           echo "CRATE_NAME=$CRATE_NAME" >> "$GITHUB_OUTPUT"
 
@@ -43,6 +44,7 @@ jobs:
           targets: ${{ steps.cfg.outputs.TARGET }}
           components: rust-src
 
+      # 缓存对“保证免费”至关重要：ESP-IDF 的 C 工具链高达数百MB，不缓存会每次消耗大量时间下载
       - name: Cache Cargo registry, build & ESP-IDF tools
         uses: actions/cache@v4
         with:
@@ -50,26 +52,25 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             target
-            # 重点：因为配置了 ESP_IDF_TOOLS_INSTALL_DIR = "workspace"，工具会下到 .embuild，必须缓存！
-            .embuild
+            .embuild # 对应你 config 里的 ESP_IDF_TOOLS_INSTALL_DIR = "workspace"
           key: ${{ runner.os }}-esp-idf-${{ steps.cfg.outputs.TARGET }}-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
             ${{ runner.os }}-esp-idf-${{ steps.cfg.outputs.TARGET }}-
 
       - name: Install cargo-binstall & tools (espflash, ldproxy)
         run: |
-          # 安装 binstall
+          # 安装 binstall (利用预编译包极速安装后续工具)
           curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash
           
-          # 安装 espflash (使用 binstall 优先走预编译包提速，失败则自动回退)
+          # 安装 espflash (优先走预编译包提速，万一失败则自动回退源码编译)
           cargo binstall -y espflash || cargo install espflash
           
-          # 安装 ldproxy (你的 config.toml 里指定了 linker = "ldproxy"，必须安装)
+          # 安装 ldproxy (对应你 config 里的 linker = "ldproxy"，构建标准库必须)
           cargo binstall -y ldproxy || cargo install ldproxy
 
       - name: Build project
         run: |
-          # 不需要手动指定 --target，因为 .cargo/config.toml 的 [build] 已经指定了
+          # 不需要手动指定 --target，因为 .cargo/config.toml 的 [build] 段已经全局指定了
           cargo build --release
 
       - name: Merge into single binary (Bootloader + Partitions + App)
@@ -77,7 +78,7 @@ jobs:
           ELF="target/${{ steps.cfg.outputs.TARGET }}/release/${{ steps.cfg.outputs.CRATE_NAME }}"
           OUT="merged-${{ steps.cfg.outputs.CHIP }}.bin"
           
-          # 如果是 std(esp-idf)，espflash save-image 同样支持直接读取带 ESP-IDF 特殊段的 ELF 并融合
+          # espflash 可以直接读取 ESP-IDF 生成的 ELF 并融合为可直接刷写的单 bin
           espflash save-image \
             --chip "${{ steps.cfg.outputs.CHIP }}" \
             --merge \
@@ -111,4 +112,4 @@ jobs:
         with:
           name: esp32-${{ steps.cfg.outputs.CHIP }}-merged-bin
           path: "merged-${{ steps.cfg.outputs.CHIP }}.bin"
-          retention-days: 7
+          retention-days: 7 # 免费仓库限制最多 90 天，设 7 天足够且干净

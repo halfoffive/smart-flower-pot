@@ -58,11 +58,9 @@ jobs:
       # ==================== 修复 ldproxy 配置冲突 ====================
       - name: Fix ldproxy config
         run: |
-          # esp-idf-sys 会在构建时动态生成环境变量设置链接器:
-          # CARGO_TARGET_*_LINKER = "ldproxy --ldproxy-linker <真实的gcc路径>"
-          # 如果 config 里写死了 `linker = "ldproxy"`，会覆盖掉上述环境变量，
-          # 导致 ldproxy 收不到 --ldproxy-linker 参数而 panic。
-          # 因此这里必须删掉 config 里的这行写死配置。
+          # esp-idf-sys 会在构建时动态设置含完整路径的链接器环境变量。
+          # 如果 config 里写死了 `linker = "ldproxy"`，会覆盖掉环境变量，
+          # 导致 ldproxy 收不到 --ldproxy-linker 参数而在后续编译时 panic。
           sed -i '/^[[:space:]]*linker[[:space:]]*=[[:space:]]*"ldproxy"$/d' .cargo/config.toml
 
       # ==================== Rust 工具链 ====================
@@ -98,7 +96,9 @@ jobs:
       - name: Install ldproxy
         run: |
           cargo binstall -y ldproxy || cargo install ldproxy
-          ldproxy --version
+          # 注意：ldproxy 不支持直接执行 `ldproxy --version`（会因缺少参数直接 panic），
+          # 所以这里只检查它是否存在于 PATH 中。
+          which ldproxy
 
       # ==================== 构建 ====================
       - name: Build

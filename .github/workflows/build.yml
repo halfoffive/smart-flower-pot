@@ -5,7 +5,7 @@ on:
     branches: ["main", "master"]
   pull_request:
     branches: ["main", "master"]
-  workflow_dispatch:   # 允许在 Actions 页面手动 Run workflow
+  workflow_dispatch:
 
 jobs:
   build:
@@ -15,82 +15,68 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # ==================== 系统依赖 ====================
+      # espflash 需要 libudev-dev；esp-idf-sys 需要 python3-venv 等
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libudev-dev \
+            python3-pip \
+            python3-venv \
+            cmake \
+            ninja-build \
+            ccache \
+            libffi-dev \
+            libssl-dev
+
       # ==================== 解析配置 ====================
-      - name: Extract build config (Target, Chip, Crate Name)
+      - name: Extract build config
         id: cfg
         run: |
-          # 1) 从 [build] 段读 target（不碰 [target.'cfg(...)']）
+          # 从 [build] 段读 target
           TARGET=$(awk -F'"' '/^\[build\]/{f=1} f && /^target/{print $2; exit}' .cargo/config.toml)
           if [ -z "$TARGET" ]; then
-            echo "::error::未在 .cargo/config.toml 中找到 [build] 下的 target = \"...\""
+            echo "::error::未找到 [build] 下的 target"
             exit 1
           fi
           echo "TARGET=$TARGET" >> "$GITHUB_OUTPUT"
 
-          # 2) 从 [env] 段读 MCU = "..."（如果你有就一定用这个）
+          # 从 [env] 段读 MCU
           CHIP=$(awk -F'"' '/^\[env\]/{f=1} f && /^MCU/{print $2; exit}' .cargo/config.toml)
-          # 兜底：从 target 里猜（esp-idf-template README 的映射）<span data-allow-html class='source-item source-aggregated' data-group-key='source-group-0' data-url='https://github.com/esp-rs/esp-idf-template' data-id='turn0fetch0'><span data-allow-html class='source-item-num' data-group-key='source-group-0' data-id='turn0fetch0' data-url='https://github.com/esp-rs/esp-idf-template'><span class='source-item-num-name' data-allow-html>github.com</span><span data-allow-html class='source-item-num-count'></span></span></span>
           if [ -z "$CHIP" ]; then
             CHIP=$(echo "$TARGET" | grep -oP '(esp32|esp32s[23]|esp32c[236]|esp32h2|esp32p4)' | head -n 1)
           fi
-          # 确保芯片名无下划线
           CHIP=$(echo "$CHIP" | tr '_' '-')
           echo "CHIP=$CHIP" >> "$GITHUB_OUTPUT"
 
-          # 3) 二进制文件名（Cargo 把 name 里的 - 换成 _）
+          # Cargo 把 name 里的 - 换成 _
           CRATE_NAME=$(grep -oP '^\s*name\s*=\s*"\K[^"]+' Cargo.toml | head -n 1 | tr '-' '_')
           echo "CRATE_NAME=$CRATE_NAME" >> "$GITHUB_OUTPUT"
 
-          echo "Detected -> Target: $TARGET | Chip: $CHIP | Binary: $CRATE_NAME"
+          echo "🎯 Target: $TARGET | Chip: $CHIP | Binary: $CRATE_NAME"
 
-      # ==================== 工具链 ====================
-      # 因为 *-espidf 目标的 rust-std 经常在 nightly 缺失，这里自动在最近 30 天
-      # 找一个存在 rust-std 的 nightly，避免回退到太老版本导致各种兼容性问题。
-      - name: Pick a nightly that has rust-std for target (within 30 days)
-        id: pick-nightly
-        run: |
-          set -e
-          TARGET="${{ steps.cfg.outputs.TARGET }}"
-          echo "Looking for a nightly with rust-std for target: $TARGET"
-
-          GOOD_DATE=""
-          for DAYS_AGO in $(seq 0 29); do
-            DATE=$(date -u -d "today - $DAYS_AGO days" "+%Y-%m-%d")
-            if curl -sS "https://rust-lang.github.io/rustup-components-history/x86_64-unknown-linux-gnu/${TARGET}.html" 2>/dev/null | \
-               grep -qE "present.*${DATE}"; then
-              GOOD_DATE="$DATE"
-              break
-            fi
-          done
-
-          if [ -z "$GOOD_DATE" ]; then
-            echo "::error::最近 30 天都没有找到 target=${TARGET} 的 rust-std，请检查是否拼错或稍后再试"
-            exit 1
-          fi
-
-          echo "NIGHTLY_DATE=${GOOD_DATE}" >> "$GITHUB_OUTPUT"
-          echo "Picked nightly-${GOOD_DATE} for target ${TARGET}"
-
-      - name: Install Rust toolchain (selected nightly)
+      # ==================== Rust 工具链 ====================
+      # RISC-V ESP 目标不在上游 rust-std 发行中，
+      # 只需 nightly + rust-src，由 config 中的 build-std 从源码编译标准库。
+      # 这也是 esp-idf-hal 官方 CI 的做法。
+      - name: Install Rust (nightly + rust-src)
         uses: dtolnay/rust-toolchain@nightly
         with:
-          toolchain: "nightly-${{ steps.pick-nightly.outputs.NIGHTLY_DATE }}"
-          targets: ${{ steps.cfg.outputs.TARGET }}
           components: rust-src
 
       # ==================== 缓存 ====================
-      # .embuild 包含 ESP‑IDF 工具链（几百 MB），必须缓存以“免费+快”
-      - name: Cache Cargo registry, build & ESP-IDF tools
+      - name: Cache Cargo, build & ESP-IDF tools
         uses: actions/cache@v4
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
             target
-            .embuild   # 对应 config 里的 ESP_IDF_TOOLS_INSTALL_DIR = "workspace"
-          key: ${{ runner.os }}-esp-idf-${{ steps.cfg.outputs.TARGET }}-${{ hashFiles('**/Cargo.lock') }}
+            .embuild
+          key: ${{ runner.os }}-esp-${{ steps.cfg.outputs.TARGET }}-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-esp-idf-${{ steps.cfg.outputs.TARGET }}-
+            ${{ runner.os }}-esp-${{ steps.cfg.outputs.TARGET }}-
 
       # ==================== 工具安装 ====================
       - name: Install cargo-binstall
@@ -98,67 +84,54 @@ jobs:
           curl -L --proto '=https' --tlsv1.2 -sSf \
             https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash
 
-      - name: Install espflash (prefer binstall; fallback to cargo install)
+      - name: Install espflash
         run: |
-          set -e
-          if command -v cargo-binstall >/dev/null 2>&1; then
-            cargo binstall -y espflash || true
-          fi
-          if ! command -v espflash >/dev/null 2>&1; then
-            cargo install espflash
-          fi
+          cargo binstall -y espflash || cargo install espflash
           espflash --version
 
-      - name: Install ldproxy (linker = "ldproxy" in your config)
+      - name: Install ldproxy
         run: |
-          set -e
-          if command -v cargo-binstall >/dev/null 2>&1; then
-            cargo binstall -y ldproxy || true
-          fi
-          if ! command -v ldproxy >/dev/null 2>&1; then
-            cargo install ldproxy
-          fi
+          cargo binstall -y ldproxy || cargo install ldproxy
           ldproxy --version
 
-      # ==================== 构建 & 合并 ====================
-      - name: Build project
+      # ==================== 构建 ====================
+      # .cargo/config.toml 已经配置了:
+      #   [build] target = "riscv32imac-esp-espidf"
+      #   [unstable] build-std = ["std", "panic_abort"]
+      # 所以直接 cargo build --release 即可，一切由 config 驱动。
+      - name: Build
         run: cargo build --release
 
-      - name: Merge into single binary (Bootloader + Partitions + App)
+      # ==================== 合并单 bin ====================
+      - name: Merge into single flashable binary
         run: |
           ELF="target/${{ steps.cfg.outputs.TARGET }}/release/${{ steps.cfg.outputs.CRATE_NAME }}"
           OUT="merged-${{ steps.cfg.outputs.CHIP }}.bin"
-
           espflash save-image \
             --chip "${{ steps.cfg.outputs.CHIP }}" \
             --merge \
             "$ELF" \
             "$OUT"
-
-          echo "Merged binary created:"
+          echo "✅ Created:"
           ls -lh "$OUT"
 
-      # ==================== 上传 0x0 + 备份 ====================
+      # ==================== 上传 ====================
       - name: Upload to 0x0.st
-        env:
-          ZERO_ST_URL: "https://0x0.st"
         run: |
           OUT="merged-${{ steps.cfg.outputs.CHIP }}.bin"
-          RESP=$(curl -sS -F "file=@${OUT}" "$ZERO_ST_URL")
+          RESP=$(curl -sS -F "file=@${OUT}" https://0x0.st)
           URL=$(echo "$RESP" | grep -oE 'https://0x0\.st/[a-zA-Z0-9]+' | head -n 1)
-
           if [ -z "$URL" ]; then
-            echo "::error::Upload to 0x0.st failed. Response: $RESP"
+            echo "::error::0x0.st upload failed: $RESP"
             exit 1
           fi
-
           echo ""
           echo "==========================================="
-          echo "Download (expires in ~1 day): $URL"
+          echo "🎉 Download: $URL"
           echo "==========================================="
           echo ""
 
-      - name: Upload artifact to GitHub (backup)
+      - name: Upload artifact (backup)
         uses: actions/upload-artifact@v4
         with:
           name: esp32-${{ steps.cfg.outputs.CHIP }}-merged-bin

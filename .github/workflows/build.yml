@@ -29,7 +29,6 @@ jobs:
       - name: Extract build config (Only Target & Chip needed)
         id: cfg
         run: |
-          # 只提取 Target 和 Chip 即可，不再提取 CRATE_NAME
           TARGET=$(awk -F'"' '/^\[build\]/{f=1} f && /^target/{print $2; exit}' .cargo/config.toml | tr -d '\r')
           if [ -z "$TARGET" ]; then
             echo "::error::未在 .cargo/config.toml 找到 [build] 下的 target"
@@ -81,22 +80,21 @@ jobs:
       - name: Build
         run: cargo build --release
 
-      # ==================== 核心修复：动态寻找 ELF ====================
+      # ==================== 终极修复：精准定位无后缀的 ELF ====================
       - name: Merge into single flashable binary
         run: |
           TARGET_DIR="target/${{ steps.cfg.outputs.TARGET }}/release"
-          echo "📂 以下为 release 目录内容："
-          ls -lh "$TARGET_DIR"
           
-          # 动态寻找 ELF 文件（排除 .d .rlib .rmeta .a 等非可执行文件）
-          ELF=$(find "$TARGET_DIR" -maxdepth 1 -type f ! -name "*.d" ! -name "*.rlib" ! -name "*.rmeta" ! -name "*.a" -print -quit)
+          # Rust 编译出的真正的可执行文件没有后缀名（如 smart-flower-pot）
+          # 而其他的 .d, .rlib, .bin, .rmeta 全都有后缀，利用这个特性精准提取！
+          ELF=$(find "$TARGET_DIR" -maxdepth 1 -type f ! -name "*.*" -print -quit)
           
           if [ -z "$ELF" ]; then
-            echo "::error::未找到编译出的 ELF 可执行文件！"
+            echo "::error::未找到 ELF 可执行文件！"
             exit 1
           fi
           
-          echo "✅ 找到 ELF 文件: $ELF"
+          echo "✅ 找到 ELF: $ELF"
           
           OUT="merged-${{ steps.cfg.outputs.CHIP }}.bin"
           espflash save-image \

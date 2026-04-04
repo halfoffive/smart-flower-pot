@@ -26,10 +26,10 @@ jobs:
             dfu-util libusb-1.0-0 \
             libudev-dev
 
-      - name: Extract build config
+      - name: Extract build config (Only Target & Chip needed)
         id: cfg
         run: |
-          # 提取时统一用 tr -d '\r' 过滤掉可能存在的 Windows 换行符 (CRLF)
+          # 只提取 Target 和 Chip 即可，不再提取 CRATE_NAME
           TARGET=$(awk -F'"' '/^\[build\]/{f=1} f && /^target/{print $2; exit}' .cargo/config.toml | tr -d '\r')
           if [ -z "$TARGET" ]; then
             echo "::error::未在 .cargo/config.toml 找到 [build] 下的 target"
@@ -44,10 +44,7 @@ jobs:
           CHIP=$(echo "$CHIP" | tr '_' '-' | tr -d '\r')
           echo "CHIP=$CHIP" >> "$GITHUB_OUTPUT"
 
-          CRATE_NAME=$(grep -oP '^\s*name\s*=\s*"\K[^"]+' Cargo.toml | head -n 1 | tr '-' '_' | tr -d '\r')
-          echo "CRATE_NAME=$CRATE_NAME" >> "$GITHUB_OUTPUT"
-
-          echo "🎯 Target: $TARGET | Chip: $CHIP | Binary: $CRATE_NAME"
+          echo "🎯 Target: $TARGET | Chip: $CHIP"
 
       - name: Install Rust (nightly + rust-src)
         uses: dtolnay/rust-toolchain@nightly
@@ -84,16 +81,30 @@ jobs:
       - name: Build
         run: cargo build --release
 
+      # ==================== 核心修复：动态寻找 ELF ====================
       - name: Merge into single flashable binary
         run: |
-          ELF="target/${{ steps.cfg.outputs.TARGET }}/release/${{ steps.cfg.outputs.CRATE_NAME }}"
+          TARGET_DIR="target/${{ steps.cfg.outputs.TARGET }}/release"
+          echo "📂 以下为 release 目录内容："
+          ls -lh "$TARGET_DIR"
+          
+          # 动态寻找 ELF 文件（排除 .d .rlib .rmeta .a 等非可执行文件）
+          ELF=$(find "$TARGET_DIR" -maxdepth 1 -type f ! -name "*.d" ! -name "*.rlib" ! -name "*.rmeta" ! -name "*.a" -print -quit)
+          
+          if [ -z "$ELF" ]; then
+            echo "::error::未找到编译出的 ELF 可执行文件！"
+            exit 1
+          fi
+          
+          echo "✅ 找到 ELF 文件: $ELF"
+          
           OUT="merged-${{ steps.cfg.outputs.CHIP }}.bin"
           espflash save-image \
             --chip "${{ steps.cfg.outputs.CHIP }}" \
             --merge \
             "$ELF" \
             "$OUT"
-          echo "✅ Created:"
+          echo "✅ 合并完成："
           ls -lh "$OUT"
 
       - name: Upload to 0x0.st

@@ -15,7 +15,6 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # ==================== 系统依赖 ====================
       - name: Install system dependencies
         run: |
           sudo apt-get update
@@ -29,11 +28,9 @@ jobs:
             libffi-dev \
             libssl-dev
 
-      # ==================== 解析配置 ====================
       - name: Extract build config
         id: cfg
         run: |
-          # 从 [build] 段读 target
           TARGET=$(awk -F'"' '/^\[build\]/{f=1} f && /^target/{print $2; exit}' .cargo/config.toml)
           if [ -z "$TARGET" ]; then
             echo "::error::未找到 [build] 下的 target"
@@ -41,7 +38,6 @@ jobs:
           fi
           echo "TARGET=$TARGET" >> "$GITHUB_OUTPUT"
 
-          # 从 [env] 段读 MCU
           CHIP=$(awk -F'"' '/^\[env\]/{f=1} f && /^MCU/{print $2; exit}' .cargo/config.toml)
           if [ -z "$CHIP" ]; then
             CHIP=$(echo "$TARGET" | grep -oP '(esp32|esp32s[23]|esp32c[236]|esp32h2|esp32p4)' | head -n 1)
@@ -49,27 +45,27 @@ jobs:
           CHIP=$(echo "$CHIP" | tr '_' '-')
           echo "CHIP=$CHIP" >> "$GITHUB_OUTPUT"
 
-          # Cargo 把 name 里的 - 换成 _
           CRATE_NAME=$(grep -oP '^\s*name\s*=\s*"\K[^"]+' Cargo.toml | head -n 1 | tr '-' '_')
           echo "CRATE_NAME=$CRATE_NAME" >> "$GITHUB_OUTPUT"
 
           echo "🎯 Target: $TARGET | Chip: $CHIP | Binary: $CRATE_NAME"
 
-      # ==================== 修复 ldproxy 配置冲突 ====================
-      - name: Fix ldproxy config
+      # ==================== 修复 linker 配置 ====================
+      - name: Fix linker config for build-std
         run: |
-          # esp-idf-sys 会在构建时动态设置含完整路径的链接器环境变量。
-          # 如果 config 里写死了 `linker = "ldproxy"`，会覆盖掉环境变量，
-          # 导致 ldproxy 收不到 --ldproxy-linker 参数而在后续编译时 panic。
+          # 1. 删除 cfg(...) 段里的 linker = "ldproxy" (它对 build-std 编译标准库无效)
           sed -i '/^[[:space:]]*linker[[:space:]]*=[[:space:]]*"ldproxy"$/d' .cargo/config.toml
+          
+          # 2. 在文件末尾追加具体的 target 配置，让标准库编译也能使用 ldproxy
+          echo "" >> .cargo/config.toml
+          echo "[target.${{ steps.cfg.outputs.TARGET }}]" >> .cargo/config.toml
+          echo "linker = \"ldproxy\"" >> .cargo/config.toml
 
-      # ==================== Rust 工具链 ====================
       - name: Install Rust (nightly + rust-src)
         uses: dtolnay/rust-toolchain@nightly
         with:
           components: rust-src
 
-      # ==================== 缓存 ====================
       - name: Cache Cargo, build & ESP-IDF tools
         uses: actions/cache@v4
         with:
@@ -82,7 +78,6 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-esp-${{ steps.cfg.outputs.TARGET }}-
 
-      # ==================== 工具安装 ====================
       - name: Install cargo-binstall
         run: |
           curl -L --proto '=https' --tlsv1.2 -sSf \
@@ -96,11 +91,39 @@ jobs:
       - name: Install ldproxy
         run: |
           cargo binstall -y ldproxy || cargo install ldproxy
-          # 注意：ldproxy 不支持直接执行 `ldproxy --version`（会因缺少参数直接 panic），
-          # 所以这里只检查它是否存在于 PATH 中。
+          # 注意：绝对不能直接运行 ldproxy 验证，否则会因为缺少参数而 panic
           which ldproxy
 
-      # ==================== 构建 ====================
+      # ==================== 破解 build-std 死锁 ====================
+      - name: Pre-download ESP-IDF tools
+        run: |
+          # 临时禁用 build-std，让 esp-idf-sys 的 build.rs 能顺利执行并下载工具链
+          sed -i 's/^build-std/#build-std/' .cargo/config.toml
+          
+          # 运行 check (会因为缺 std 失败，但工具链已经下载到 .embuild 了)
+          cargo check --target "${{ steps.cfg.outputs.TARGET }}" 2>&1 || true
+          
+          # 恢复 build-std
+          sed -i 's/^#build-std/build-std/' .cargo/config.toml
+          
+          # 推导 gcc 的名字 (riscv32 -> riscv32-esp-elf-gcc, xtensa -> xtensa-esp32s3-elf-gcc)
+          TARGET="${{ steps.cfg.outputs.TARGET }}"
+          if [[ "$TARGET" == riscv32* ]]; then
+            GCC_NAME="riscv32-esp-elf-gcc"
+          else
+            GCC_NAME="${TARGET%-espidf}-elf-gcc"
+          fi
+          
+          # 在 .embuild 中找到刚下载的 gcc，并将其目录加入后续步骤的 PATH
+          GCC_DIR=$(find .embuild -name "$GCC_NAME" -type f -exec dirname {} \; | head -n 1)
+          if [ -z "$GCC_DIR" ]; then
+            echo "::error::未能找到 $GCC_NAME，工具链下载可能失败"
+            exit 1
+          fi
+          echo "✅ 找到工具链: $GCC_DIR"
+          echo "$GCC_DIR" >> $GITHUB_PATH
+
+      # ==================== 真正的构建 ====================
       - name: Build
         run: cargo build --release
 

@@ -5,7 +5,7 @@ on:
     branches: ["main", "master"]
   pull_request:
     branches: ["main", "master"]
-  workflow_dispatch: # 手动 Run workflow
+  workflow_dispatch:
 
 jobs:
   build:
@@ -15,7 +15,6 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # ========== 系统依赖（esp-idf-sys 构建脚本需要这些） ==========
       - name: Install system dependencies
         run: |
           sudo apt-get update
@@ -27,43 +26,34 @@ jobs:
             dfu-util libusb-1.0-0 \
             libudev-dev
 
-      # ========== 解析项目配置 ==========
       - name: Extract build config
         id: cfg
         run: |
-          # 从 [build] 段读 target（不碰 [target.'cfg(...)']）
-          TARGET=$(awk -F'"' '/^\[build\]/{f=1} f && /^target/{print $2; exit}' .cargo/config.toml)
+          # 提取时统一用 tr -d '\r' 过滤掉可能存在的 Windows 换行符 (CRLF)
+          TARGET=$(awk -F'"' '/^\[build\]/{f=1} f && /^target/{print $2; exit}' .cargo/config.toml | tr -d '\r')
           if [ -z "$TARGET" ]; then
-            echo "::error::未在 .cargo/config.toml 找到 [build] 下的 target = \"...\""
+            echo "::error::未在 .cargo/config.toml 找到 [build] 下的 target"
             exit 1
           fi
           echo "TARGET=$TARGET" >> "$GITHUB_OUTPUT"
 
-          # 从 [env] 段读 MCU
-          CHIP=$(awk -F'"' '/^\[env\]/{f=1} f && /^MCU/{print $2; exit}' .cargo/config.toml)
-          # 如果没有 MCU，再从 target 猜
+          CHIP=$(awk -F'"' '/^\[env\]/{f=1} f && /^MCU/{print $2; exit}' .cargo/config.toml | tr -d '\r')
           if [ -z "$CHIP" ]; then
             CHIP=$(echo "$TARGET" | grep -oP '(esp32|esp32s[23]|esp32c[236]|esp32h2|esp32p4)' | head -n 1)
           fi
-          CHIP=$(echo "$CHIP" | tr '_' '-')
+          CHIP=$(echo "$CHIP" | tr '_' '-' | tr -d '\r')
           echo "CHIP=$CHIP" >> "$GITHUB_OUTPUT"
 
-          # Cargo 会把 name 里的 - 换成 _
-          CRATE_NAME=$(grep -oP '^\s*name\s*=\s*"\K[^"]+' Cargo.toml | head -n 1 | tr '-' '_')
+          CRATE_NAME=$(grep -oP '^\s*name\s*=\s*"\K[^"]+' Cargo.toml | head -n 1 | tr '-' '_' | tr -d '\r')
           echo "CRATE_NAME=$CRATE_NAME" >> "$GITHUB_OUTPUT"
 
           echo "🎯 Target: $TARGET | Chip: $CHIP | Binary: $CRATE_NAME"
 
-      # ========== Rust 工具链 ==========
-      # RISC-V 的 *-espidf 目标没有上游 rust-std，只用 rust-src 即可，
-      # 由 .cargo/config.toml 中的 build-std 从源码编译标准库。
       - name: Install Rust (nightly + rust-src)
         uses: dtolnay/rust-toolchain@nightly
         with:
           components: rust-src
 
-      # ========== 缓存（强烈建议） ==========
-      # .embuild 中包含 ESP-IDF 与 GCC 工具链，体积大但内容稳定，缓存后可大幅提速
       - name: Cache Cargo, build & ESP-IDF tools
         uses: actions/cache@v4
         with:
@@ -76,7 +66,6 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-esp-${{ steps.cfg.outputs.TARGET }}-
 
-      # ========== 工具安装（binstall 加速） ==========
       - name: Install cargo-binstall
         run: |
           curl -L --proto '=https' --tlsv1.2 -sSf \
@@ -90,15 +79,11 @@ jobs:
       - name: Install ldproxy
         run: |
           cargo binstall -y ldproxy || cargo install ldproxy
-          # ldproxy 不支持裸跑（会因缺 --ldproxy-linker 而 panic），只检查是否存在
           which ldproxy
 
-      # ========== 直接构建（让 .cargo/config.toml 驱动一切） ==========
-      # 不要再去改 build-std 或 cargo check；模板 CI 对 RISC-V 也是直接 cargo build
       - name: Build
         run: cargo build --release
 
-      # ========== 合并单 bin（bootloader + partition-table + app） ==========
       - name: Merge into single flashable binary
         run: |
           ELF="target/${{ steps.cfg.outputs.TARGET }}/release/${{ steps.cfg.outputs.CRATE_NAME }}"
@@ -111,7 +96,6 @@ jobs:
           echo "✅ Created:"
           ls -lh "$OUT"
 
-      # ========== 上传到 0x0.st（公开直链） ==========
       - name: Upload to 0x0.st
         run: |
           OUT="merged-${{ steps.cfg.outputs.CHIP }}.bin"
@@ -127,7 +111,6 @@ jobs:
           echo "==========================================="
           echo ""
 
-      # ========== 备份到 GitHub Artifacts（7 天） ==========
       - name: Upload artifact (backup)
         uses: actions/upload-artifact@v4
         with:

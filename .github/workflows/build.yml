@@ -26,7 +26,7 @@ jobs:
             dfu-util libusb-1.0-0 \
             libudev-dev
 
-      - name: Extract build config (Only Target & Chip needed)
+      - name: Extract build config
         id: cfg
         run: |
           TARGET=$(awk -F'"' '/^\[build\]/{f=1} f && /^target/{print $2; exit}' .cargo/config.toml | tr -d '\r')
@@ -80,13 +80,9 @@ jobs:
       - name: Build
         run: cargo build --release
 
-      # ==================== 终极修复：精准定位无后缀的 ELF ====================
       - name: Merge into single flashable binary
         run: |
           TARGET_DIR="target/${{ steps.cfg.outputs.TARGET }}/release"
-          
-          # Rust 编译出的真正的可执行文件没有后缀名（如 smart-flower-pot）
-          # 而其他的 .d, .rlib, .bin, .rmeta 全都有后缀，利用这个特性精准提取！
           ELF=$(find "$TARGET_DIR" -maxdepth 1 -type f ! -name "*.*" -print -quit)
           
           if [ -z "$ELF" ]; then
@@ -105,22 +101,20 @@ jobs:
           echo "✅ 合并完成："
           ls -lh "$OUT"
 
-      - name: Upload to 0x0.st
+      # ==================== 下载指引 ====================
+      # 0x0.st 目前因垃圾信息暂时关闭了上传功能。
+      # 固件已上传至 GitHub Artifacts，请在 Actions 页面下载。
+      - name: Print download instructions
         run: |
-          OUT="merged-${{ steps.cfg.outputs.CHIP }}.bin"
-          RESP=$(curl -sS -F "file=@${OUT}" https://0x0.st)
-          URL=$(echo "$RESP" | grep -oE 'https://0x0\.st/[a-zA-Z0-9]+' | head -n 1)
-          if [ -z "$URL" ]; then
-            echo "::error::0x0.st upload failed. Response: $RESP"
-            exit 1
-          fi
           echo ""
           echo "==========================================="
-          echo "🎉 Download: $URL"
+          echo "🎉 构建成功！"
+          echo "📦 请在当前 Run 页面底部的 'Artifacts' 区域"
+          echo "   下载 esp32-${{ steps.cfg.outputs.CHIP }}-merged-bin.zip"
           echo "==========================================="
           echo ""
 
-      - name: Upload artifact (backup)
+      - name: Upload artifact to GitHub
         uses: actions/upload-artifact@v4
         with:
           name: esp32-${{ steps.cfg.outputs.CHIP }}-merged-bin

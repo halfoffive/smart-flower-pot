@@ -1,4 +1,4 @@
-name: ESP32 Build & Upload to 0x0
+name: ESP32 (std) Build & Upload to 0x0
 
 on:
   push:
@@ -15,36 +15,53 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Extract build config (Target, Chip, Crate Name)
-        id: config
+        id: cfg
         run: |
-          # 1. 提取 target (例如 xtensa-esp32s3-none-elf)
-          # 兼容可能的 _ 符号，统一转换为 -
-          TARGET=$(grep -E '^\[target\.' .cargo/config.toml | head -n 1 | sed 's/\[target\.//;s/\]//' | tr '_' '-')
-          echo "TARGET=$TARGET" >> $GITHUB_OUTPUT
-          echo "🏗️ Detected Target: $TARGET"
-
-          # 2. 提取 chip (例如 esp32s3)
-          # 优先从 --chip 参数获取，否则从 target 字符串截取
-          CHIP=$(grep -oP '(?<=--chip\s)[^\s",]+' .cargo/config.toml | head -n 1)
-          if [ -z "$CHIP" ]; then
-            CHIP=$(echo "$TARGET" | grep -oP 'esp[^-]+(-[a-z0-9]+)?' | head -n 1)
+          # 1) 从 .cargo/config.toml 提取 target（只取第一个 [target.xxx]，且不包含 cfg 表达式）
+          TARGET=$(grep -E '^\[target\.' .cargo/config.toml | head -n 1 | sed 's/^\[target\.//;s/\]//')
+          # 确保看起来像 Rustup target（不含 cfg(...)）
+          if echo "$TARGET" | grep -qE 'cfg\('; then
+            echo "::error::.cargo/config.toml 里包含 cfg(...) 形式的 target，请改用真正的 Rustup 目标（如 xtensa-esp32s3-espidf）"
+            exit 1
           fi
-          # 确保芯片名没有下划线 (esp32_s3 -> esp32-s3)
+          # 统一用 - 避免下划线干扰
+          TARGET=$(echo "$TARGET" | tr '_' '-')
+          echo "TARGET=$TARGET" >> "$GITHUB_OUTPUT"
+
+          # 2) 提取 chip：优先从 [package.metadata.esp-idf-sys].mcu 取
+          CHIP=$(grep -oP '^\s*mcu\s*=\s*"\K[^"]+' Cargo.toml | head -n 1)
+          # 若没有，就尝试从 target 名里猜（简单但不完美）
+          if [ -z "$CHIP" ]; then
+            CHIP=$(echo "$TARGET" | grep -oP '(esp32|esp32s[23]|esp32c[236]|esp32h2|esp32p4)' | head -n 1)
+          fi
+          # 确保 chip 里没有下划线
           CHIP=$(echo "$CHIP" | tr '_' '-')
-          echo "CHIP=$CHIP" >> $GITHUB_OUTPUT
-          echo "🔧 Detected Chip: $CHIP"
+          echo "CHIP=$CHIP" >> "$GITHUB_OUTPUT"
 
-          # 3. 提取项目名
-          # Cargo 编译二进制时，会将 Cargo.toml 中的 "-" 替换为 "_"
+          # 3) 二进制文件名（Cargo 会把 name 里的 - 换成 _）
           CRATE_NAME=$(grep -oP '^\s*name\s*=\s*"\K[^"]+' Cargo.toml | head -n 1 | tr '-' '_')
-          echo "CRATE_NAME=$CRATE_NAME" >> $GITHUB_OUTPUT
-          echo "📦 Detected Crate Name: $CRATE_NAME"
+          echo "CRATE_NAME=$CRATE_NAME" >> "$GITHUB_OUTPUT"
 
-      - name: Install Rust toolchain
+          echo "Detected: TARGET=$TARGET, CHIP=$CHIP, CRATE_NAME=$CRATE_NAME"
+
+      - name: Install Rust toolchain (RISC-V)
+        if: >-
+          steps.cfg.outputs.TARGET == 'riscv32imc-esp-espidf' ||
+          steps.cfg.outputs.TARGET == 'riscv32imac-esp-espidf' ||
+          steps.cfg.outputs.TARGET == 'riscv32imafc-esp-espidf'
         uses: dtolnay/rust-toolchain@nightly
         with:
-          targets: ${{ steps.config.outputs.TARGET }}
+          targets: ${{ steps.cfg.outputs.TARGET }}
           components: rust-src
+
+      - name: Install Rust toolchain (Xtensa)
+        if: >-
+          startsWith(steps.cfg.outputs.TARGET, 'xtensa-')
+        uses: esp-rs/xtensa-toolchain@v1.6
+        with:
+          default: true
+          buildtargets: "${{ steps.cfg.outputs.TARGET }}"
+          ldproxy: false
 
       - name: Cache Cargo registry & build
         uses: actions/cache@v4
@@ -53,60 +70,67 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: ${{ runner.os }}-cargo-${{ steps.config.outputs.TARGET }}-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-${{ steps.cfg.outputs.TARGET }}-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-cargo-${{ steps.config.outputs.TARGET }}-
+            ${{ runner.os }}-cargo-${{ steps.cfg.outputs.TARGET }}-
 
-      - name: Install espflash (via cargo-bininstall)
+      - name: Install cargo-binstall (for faster espflash install)
         run: |
-          # 优先安装 cargo-bininstall 以利用其缓存机制
-          cargo install cargo-bininstall --locked
-          # 使用 bininstall 安装 espflash，如果缓存未命中则会自动回退到常规编译安装
-          cargo bininstall espflash
+          # cargo-binstall 优先用 GitHub Releases 预编译包
+          curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash
+
+      - name: Install espflash (via cargo binstall, fallback to cargo install)
+        run: |
+          set -e
+          # 如果 ~/.cargo/bin/espflash 已经存在，跳过安装
+          if command -v espflash >/dev/null 2>&1; then
+            espflash --version
+            exit 0
+          fi
+
+          # 优先用 binstall（速度快）
+          if command -v cargo-binstall >/dev/null 2>&1; then
+            cargo binstall -y espflash || true
+          fi
+
+          # 如果 binstall 没成功，再用 cargo install
+          if ! command -v espflash >/dev/null 2>&1; then
+            cargo install espflash --locked
+          fi
+
+          espflash --version
 
       - name: Build project
-        run: |
-          cargo build --release --target ${{ steps.config.outputs.TARGET }}
+        run: cargo build --release
 
-      - name: Merge into single binary
+      - name: Merge into single binary (bootloader + part-table + app)
         run: |
-          # 使用 espflash 融合 bootloader, partition-table 和 app
-          # 注意：如果是 std 版本且基于 esp-idf，这里依然适用，espflash 能自动识别 ELF 格式并处理
+          ELF="target/${{ steps.cfg.outputs.TARGET }}/release/${{ steps.cfg.outputs.CRATE_NAME }}"
+          OUT="merged-${{ steps.cfg.outputs.CHIP }}.bin"
           espflash save-image \
-            --chip ${{ steps.config.outputs.CHIP }} \
+            --chip "${{ steps.cfg.outputs.CHIP }}" \
             --merge \
-            "target/${{ steps.config.outputs.TARGET }}/release/${{ steps.config.outputs.CRATE_NAME }}" \
-            merged.bin
-          
-          echo "✅ Merged binary created:"
-          ls -lh merged.bin
+            "$ELF" \
+            "$OUT"
+          echo "Merged binary: $OUT"
+          ls -lh "$OUT"
 
       - name: Upload to 0x0.st
         env:
           ZERO_ST_URL: "https://0x0.st"
         run: |
-          # 使用 curl 上传，-F 参数确保以二进制文件形式上传
-          # 0x0.st 默认保留 1 天，如需永久可加参数（但目前0x0.st API不支持，默认1天对CI足够）
-          RESPONSE=$(curl -s -F "file=@merged.bin" $ZERO_ST_URL)
-          
-          # 提取 URL
-          URL=$(echo "$RESPONSE" | grep -oE 'https://0x0\.st/[a-zA-Z0-9]+' | head -n 1)
-          
+          OUT="merged-${{ steps.cfg.outputs.CHIP }}.bin"
+          RESP=$(curl -sS -F "file=@${OUT}" "$ZERO_ST_URL")
+          URL=$(echo "$RESP" | grep -oE 'https://0x0\.st/[a-zA-Z0-9]+' | head -n 1)
           if [ -z "$URL" ]; then
-            echo "❌ Upload failed. Response from 0x0.st:"
-            echo "$RESPONSE"
+            echo "::error::Upload to 0x0.st failed: $RESP"
             exit 1
           fi
-          
-          echo ""
-          echo "==========================================="
-          echo "🎉 直接下载链接 (有效期1天): $URL"
-          echo "==========================================="
-          echo ""
+          echo "Download link: $URL"
 
-      - name: Upload artifact to GitHub (Backup)
+      - name: Upload artifact to GitHub (backup)
         uses: actions/upload-artifact@v4
         with:
-          name: esp32-${{ steps.config.outputs.CHIP }}-merged-bin
-          path: merged.bin
+          name: esp32-${{ steps.cfg.outputs.CHIP }}-merged-bin
+          path: "merged-${{ steps.cfg.outputs.CHIP }}.bin"
           retention-days: 7

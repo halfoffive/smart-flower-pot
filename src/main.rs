@@ -7,6 +7,7 @@
 //! - 节能模式
 
 use anyhow::Result;
+use esp_idf_svc::hal::peripherals::Peripherals;
 
 // 引入子模块
 mod sensors;
@@ -30,7 +31,8 @@ struct SystemState {
     pump2_active: bool,
 }
 
-fn main() -> Result<()> {
+/// 主异步函数
+async fn run() -> Result<()> {
     // 必须调用此函数以链接 ESP-IDF 补丁
     esp_idf_svc::sys::link_patches();
     
@@ -51,12 +53,12 @@ fn main() -> Result<()> {
     log::info!("初始化硬件...");
     
     // 安全地获取外设实例
-    let peripherals = esp_idf_svc::hal::Peripherals::take()
+    let mut peripherals = Peripherals::take()
         .map_err(|_| anyhow::anyhow!("无法获取外设"))?;
     
     // 初始化土壤湿度传感器 (ADC - GPIO4)
     // 注意: 如果初始化失败,使用模拟值继续运行
-    let sensor = match SoilMoistureSensor::new(peripherals.pins.gpio4) {
+    let mut sensor = match SoilMoistureSensor::new(&mut peripherals, peripherals.pins.gpio4) {
         Ok(s) => Some(s),
         Err(e) => {
             log::warn!("土壤湿度传感器初始化失败: {}, 使用模拟值", e);
@@ -65,10 +67,7 @@ fn main() -> Result<()> {
     };
     
     // 初始化水泵控制器 (GPIO5, GPIO6 控制 L298N)
-    let pump_controller = match WaterPumpController::new(
-        peripherals.pins.gpio5,
-        peripherals.pins.gpio6,
-    ) {
+    let mut pump_controller = match WaterPumpController::new(&mut peripherals) {
         Ok(p) => Some(p),
         Err(e) => {
             log::warn!("水泵控制器初始化失败: {}, 跳过水泵控制", e);
@@ -85,7 +84,7 @@ fn main() -> Result<()> {
     // 主循环 - 使用 embassy-time 进行节能延迟
     loop {
         // 读取土壤湿度
-        let moisture = if let Some(ref s) = sensor {
+        let moisture = if let Some(ref mut s) = sensor {
             s.read_moisture().unwrap_or(0)
         } else {
             // 模拟值 (用于测试)
@@ -133,4 +132,11 @@ fn main() -> Result<()> {
         // 节能延迟 (10 秒)
         embassy_time::Timer::after_secs(10).await;
     }
+}
+
+/// 入口函数 (非异步,调用异步主函数)
+#[esp_idf_svc::hal::task::main]
+fn main() -> Result<()> {
+    // 运行异步主函数
+    embassy_futures::block_on(run())
 }

@@ -3,32 +3,27 @@
 //! 控制 L298N 驱动的两个水泵
 
 use anyhow::Result;
-use esp_idf_svc::hal::gpio::Output;
-use esp_idf_svc::hal::peripheral::Peripheral;
+use esp_idf_svc::hal::gpio::{AnyIOPin, PinDriver, Output, OutputMode};
+use esp_idf_svc::hal::peripherals::Peripherals;
 
 /// 水泵控制器 (L298N)
 pub struct WaterPumpController {
     /// 水泵 1 控制引脚
-    pump1_pin: Output,
+    pump1_pin: PinDriver<'static, AnyIOPin, Output>,
     /// 水泵 2 控制引脚  
-    pump2_pin: Output,
+    pump2_pin: PinDriver<'static, AnyIOPin, Output>,
 }
 
 impl WaterPumpController {
     /// 初始化水泵控制器
     /// 
     /// # 参数
-    /// * `pump1_pin` - 水泵 1 控制引脚 (GPIO5)
-    /// * `pump2_pin` - 水泵 2 控制引脚 (GPIO6)
-    pub fn new<P1, P2>(pump1_pin: P1, pump2_pin: P2) -> Result<Self>
-    where
-        P1: Peripheral<P = impl Output>,
-        P2: Peripheral<P = impl Output>,
-    {
+    /// * `peripherals` - 外设实例
+    pub fn new(peripherals: &mut Peripherals) -> Result<Self> {
         // 默认输出低电平 (水泵关闭)
-        let pump1_pin = Output::new(pump1_pin, true)
+        let pump1_pin = PinDriver::output(peripherals.pins.gpio5)
             .map_err(|e| anyhow::anyhow!("水泵 1 引脚初始化失败: {:?}", e))?;
-        let pump2_pin = Output::new(pump2_pin, true)
+        let pump2_pin = PinDriver::output(peripherals.pins.gpio6)
             .map_err(|e| anyhow::anyhow!("水泵 2 引脚初始化失败: {:?}", e))?;
         
         log::info!("水泵控制器初始化完成 (GPIO5, GPIO6)");

@@ -2,3 +2,5 @@
 /.embuild
 /target
 /Cargo.lock
+web-ui/dist
+web-ui/node_modules

@@ -4,7 +4,6 @@
 
 use anyhow::Result;
 use esp_idf_svc::hal::gpio::{Output, PinDriver};
-use esp_idf_svc::hal::peripherals::Peripherals;
 
 /// 水泵控制器 (L298N)
 pub struct WaterPumpController<'d> {
@@ -18,13 +17,16 @@ impl<'d> WaterPumpController<'d> {
     /// 初始化水泵控制器
     ///
     /// # 参数
-    /// * `peripherals` - 外设实例
-    pub fn new(peripherals: &'d mut Peripherals) -> Result<Self> {
-        // 默认输出低电平 (水泵关闭)
-        // 注意: PinDriver::output 直接获取引脚所有权，不需要 &mut
-        let pump1_pin = PinDriver::output(peripherals.pins.gpio5)
+    /// * `gpio5` - 水泵 1 控制引脚
+    /// * `gpio6` - 水泵 2 控制引脚
+    pub fn new(
+        gpio5: impl Into<esp_idf_svc::hal::gpio::AnyIOPin<'d>>,
+        gpio6: impl Into<esp_idf_svc::hal::gpio::AnyIOPin<'d>>,
+    ) -> Result<Self> {
+        // 转换为 AnyIOPin 后再创建 PinDriver
+        let pump1_pin = PinDriver::output(gpio5.into())
             .map_err(|e| anyhow::anyhow!("水泵 1 引脚初始化失败: {:?}", e))?;
-        let pump2_pin = PinDriver::output(peripherals.pins.gpio6)
+        let pump2_pin = PinDriver::output(gpio6.into())
             .map_err(|e| anyhow::anyhow!("水泵 2 引脚初始化失败: {:?}", e))?;
 
         log::info!("水泵控制器初始化完成 (GPIO5, GPIO6)");

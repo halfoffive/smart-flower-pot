@@ -54,27 +54,29 @@ async fn run() -> Result<()> {
     log::info!("初始化硬件...");
 
     // 安全地获取外设实例
-    let mut peripherals = Peripherals::take()
+    let peripherals = Peripherals::take()
         .map_err(|_| anyhow::anyhow!("无法获取外设"))?;
 
-    // 初始化水泵控制器 (GPIO5, GPIO6 控制 L298N)
-    // 注意: 先初始化水泵，因为它需要借用 peripherals
-    let mut pump_controller = match WaterPumpController::new(&mut peripherals) {
-        Ok(p) => Some(p),
+    // 提取需要的引脚 (从 peripherals 中移动出来)
+    let gpio4 = peripherals.pins.gpio4;
+    let gpio5 = peripherals.pins.gpio5;
+    let gpio6 = peripherals.pins.gpio6;
+
+    // 初始化土壤湿度传感器 (ADC - GPIO4)
+    // 注意: 如果初始化失败,使用模拟值继续运行
+    let mut sensor = match SoilMoistureSensor::new(gpio4.into()) {
+        Ok(s) => Some(s),
         Err(e) => {
-            log::warn!("水泵控制器初始化失败: {}, 跳过水泵控制", e);
+            log::warn!("土壤湿度传感器初始化失败: {}, 使用模拟值", e);
             None
         }
     };
 
-    // 初始化土壤湿度传感器 (ADC - GPIO4)
-    // 注意: 如果初始化失败,使用模拟值继续运行
-    // 将 gpio4 移动给传感器，避免借用冲突
-    let gpio4 = peripherals.pins.gpio4.into();
-    let mut sensor = match SoilMoistureSensor::new(gpio4) {
-        Ok(s) => Some(s),
+    // 初始化水泵控制器 (GPIO5, GPIO6 控制 L298N)
+    let mut pump_controller = match WaterPumpController::new(gpio5, gpio6) {
+        Ok(p) => Some(p),
         Err(e) => {
-            log::warn!("土壤湿度传感器初始化失败: {}, 使用模拟值", e);
+            log::warn!("水泵控制器初始化失败: {}, 跳过水泵控制", e);
             None
         }
     };

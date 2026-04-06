@@ -2,23 +2,12 @@
 //! 
 //! 管理智能花盆的运行配置参数
 
-use serde::{Serialize, Deserialize};
-
-/// 浇水模式枚举
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
-pub enum WateringMode {
-    /// 低于阈值时浇水
-    WaterWhenBelow,
-    /// 高于阈值时浇水
-    WaterWhenAbove,
-}
-
 /// 智能花盆配置
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy)]
 pub struct FlowerPotConfig {
     /// 湿度阈值 (0-4095)
     pub threshold: u16,
-    /// 浇水模式
+    /// 浇水模式: true=低于阈值浇水, false=高于阈值浇水
     pub water_when_below: bool,
     /// 水泵运行最长时间 (秒)
     pub max_pump_duration: u16,

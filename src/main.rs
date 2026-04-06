@@ -8,6 +8,7 @@
 
 use anyhow::Result;
 use esp_idf_svc::hal::peripherals::Peripherals;
+use esp_idf_svc::hal::task::block_on;
 
 // 引入子模块
 mod sensors;
@@ -58,7 +59,7 @@ async fn run() -> Result<()> {
     
     // 初始化土壤湿度传感器 (ADC - GPIO4)
     // 注意: 如果初始化失败,使用模拟值继续运行
-    let mut sensor = match SoilMoistureSensor::new(&mut peripherals, peripherals.pins.gpio4) {
+    let mut sensor = match SoilMoistureSensor::new(&mut peripherals, peripherals.pins.gpio4.into()) {
         Ok(s) => Some(s),
         Err(e) => {
             log::warn!("土壤湿度传感器初始化失败: {}, 使用模拟值", e);
@@ -134,9 +135,9 @@ async fn run() -> Result<()> {
     }
 }
 
-/// 入口函数 (非异步,调用异步主函数)
-#[esp_idf_svc::hal::task::main]
-fn main() -> Result<()> {
+/// 入口函数 (ESP-IDF 标准的 app_main)
+#[no_mangle]
+pub extern "C" fn app_main() {
     // 运行异步主函数
-    embassy_futures::block_on(run())
+    block_on(run()).unwrap();
 }

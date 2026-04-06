@@ -3,8 +3,6 @@
 //! 使用 ADC 读取电阻式土壤湿度传感器
 
 use anyhow::Result;
-use esp_idf_svc::hal::adc::oneshot;
-use esp_idf_svc::hal::adc::{Adc, ADCU1};
 use esp_idf_svc::hal::gpio::AnyIOPin;
 use esp_idf_svc::hal::peripherals::Peripherals;
 
@@ -19,7 +17,7 @@ impl SoilMoistureSensor {
     /// 
     /// 注意: 由于 esp-idf-hal 的 ADC API 需要复杂的生命周期管理,
     /// 这里简化为直接读取,实际项目中应使用完整的 ADC 驱动
-    pub fn new(_peripherals: &mut Peripherals, pin: AnyIOPin) -> Result<Self> {
+    pub fn new(_peripherals: &mut Peripherals, _pin: AnyIOPin<'_>) -> Result<Self> {
         // 获取引脚编号 (简化处理)
         let pin_number = 4; // 默认 GPIO4
         

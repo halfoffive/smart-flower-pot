@@ -1,5 +1,5 @@
 //! 智能花盆固件 - ESP32-C6
-//! 
+//!
 //! 功能:
 //! - 土壤湿度检测 (ADC)
 //! - 双水泵控制 (L298N)
@@ -36,12 +36,12 @@ struct SystemState {
 async fn run() -> Result<()> {
     // 必须调用此函数以链接 ESP-IDF 补丁
     esp_idf_svc::sys::link_patches();
-    
+
     // 绑定日志系统
     esp_idf_svc::log::EspLogger::initialize_default();
-    
+
     log::info!("🌱 智能花盆系统启动中...");
-    
+
     // 初始化默认配置
     let mut config = FlowerPotConfig::default();
     let mut state = SystemState {
@@ -49,25 +49,16 @@ async fn run() -> Result<()> {
         pump1_active: false,
         pump2_active: false,
     };
-    
+
     // 初始化硬件
     log::info!("初始化硬件...");
-    
+
     // 安全地获取外设实例
     let mut peripherals = Peripherals::take()
         .map_err(|_| anyhow::anyhow!("无法获取外设"))?;
-    
-    // 初始化土壤湿度传感器 (ADC - GPIO4)
-    // 注意: 如果初始化失败,使用模拟值继续运行
-    let mut sensor = match SoilMoistureSensor::new(&mut peripherals, peripherals.pins.gpio4.into()) {
-        Ok(s) => Some(s),
-        Err(e) => {
-            log::warn!("土壤湿度传感器初始化失败: {}, 使用模拟值", e);
-            None
-        }
-    };
-    
+
     // 初始化水泵控制器 (GPIO5, GPIO6 控制 L298N)
+    // 注意: 先初始化水泵，因为它需要借用 peripherals
     let mut pump_controller = match WaterPumpController::new(&mut peripherals) {
         Ok(p) => Some(p),
         Err(e) => {
@@ -75,7 +66,19 @@ async fn run() -> Result<()> {
             None
         }
     };
-    
+
+    // 初始化土壤湿度传感器 (ADC - GPIO4)
+    // 注意: 如果初始化失败,使用模拟值继续运行
+    // 将 gpio4 移动给传感器，避免借用冲突
+    let gpio4 = peripherals.pins.gpio4.into();
+    let mut sensor = match SoilMoistureSensor::new(gpio4) {
+        Ok(s) => Some(s),
+        Err(e) => {
+            log::warn!("土壤湿度传感器初始化失败: {}, 使用模拟值", e);
+            None
+        }
+    };
+
     log::info!("硬件初始化完成");
     
     // 启动 BLE 服务
@@ -140,4 +143,16 @@ async fn run() -> Result<()> {
 pub extern "C" fn app_main() {
     // 运行异步主函数
     block_on(run()).unwrap();
+}
+
+/// 标准 main 函数 (用于 cargo check 和本地测试)
+#[cfg(not(target_os = "espidf"))]
+fn main() -> Result<()> {
+    block_on(run())
+}
+
+/// ESP-IDF 平台下的 main 函数，委托给 app_main
+#[cfg(target_os = "espidf")]
+fn main() {
+    app_main()
 }

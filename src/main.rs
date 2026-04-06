@@ -11,15 +11,15 @@ use esp_idf_svc::hal::peripherals::Peripherals;
 use esp_idf_svc::hal::task::block_on;
 
 // 引入子模块
-mod sensors;
 mod actuators;
 mod ble_service;
 mod config;
+mod sensors;
 
-use sensors::SoilMoistureSensor;
 use actuators::WaterPumpController;
 use ble_service::SmartFlowerPotBLE;
 use config::FlowerPotConfig;
+use sensors::SoilMoistureSensor;
 
 /// 系统主状态
 #[derive(Debug, Clone)]
@@ -54,8 +54,7 @@ async fn run() -> Result<()> {
     log::info!("初始化硬件...");
 
     // 安全地获取外设实例
-    let peripherals = Peripherals::take()
-        .map_err(|_| anyhow::anyhow!("无法获取外设"))?;
+    let peripherals = Peripherals::take().map_err(|_| anyhow::anyhow!("无法获取外设"))?;
 
     // 提取需要的引脚 (从 peripherals 中移动出来)
     let gpio4 = peripherals.pins.gpio4;
@@ -82,11 +81,11 @@ async fn run() -> Result<()> {
     };
 
     log::info!("硬件初始化完成");
-    
+
     // 启动 BLE 服务
     let mut ble = SmartFlowerPotBLE::new()?;
     log::info!("BLE 服务已启动, 等待连接...");
-    
+
     // 主循环 - 使用 embassy-time 进行节能延迟
     loop {
         // 读取土壤湿度
@@ -96,19 +95,26 @@ async fn run() -> Result<()> {
             // 模拟值 (用于测试)
             1500
         };
-        
+
         state.moisture_level = moisture;
-        log::debug!("土壤湿度: {} (阈值: {}, 模式: {})", 
-                   moisture, config.threshold, 
-                   if config.water_when_below { "低于阈值浇水" } else { "高于阈值浇水" });
-        
+        log::debug!(
+            "土壤湿度: {} (阈值: {}, 模式: {})",
+            moisture,
+            config.threshold,
+            if config.water_when_below {
+                "低于阈值浇水"
+            } else {
+                "高于阈值浇水"
+            }
+        );
+
         // 自动浇水逻辑
         let should_water = if config.water_when_below {
             moisture < config.threshold
         } else {
             moisture > config.threshold
         };
-        
+
         if should_water && !state.pump1_active {
             log::info!("土壤干燥, 启动水泵浇水");
             if let Some(ref mut controller) = pump_controller {
@@ -124,37 +130,33 @@ async fn run() -> Result<()> {
                 }
             }
         }
-        
+
         // 更新 BLE 状态
         ble.update_moisture(moisture);
         ble.update_pump_state(state.pump1_active, state.pump2_active);
-        
+
         // 检查配置更新 (来自 BLE)
         if let Some(new_config) = ble.take_pending_config() {
             log::info!("配置已更新: {:?}", new_config);
             config = new_config;
         }
-        
+
         // 节能延迟 (10 秒)
         embassy_time::Timer::after_secs(10).await;
     }
 }
 
-/// 入口函数 (ESP-IDF 标准的 app_main)
-#[no_mangle]
-pub extern "C" fn app_main() {
-    // 运行异步主函数
-    block_on(run()).unwrap();
-}
-
-/// 标准 main 函数 (用于 cargo check 和本地测试)
-#[cfg(not(target_os = "espidf"))]
+/// 入口函数 (ESP-IDF 会自动调用此函数)
+///
+/// 注意: esp-idf-sys 的 binstart feature 会自动生成 app_main() 调用此函数,
+/// 因此不需要手动定义 #[no_mangle] pub extern "C" fn app_main()
 fn main() -> Result<()> {
-    block_on(run())
-}
+    // 必须调用此函数以链接 ESP-IDF 补丁
+    esp_idf_svc::sys::link_patches();
 
-/// ESP-IDF 平台下的 main 函数，委托给 app_main
-#[cfg(target_os = "espidf")]
-fn main() {
-    app_main()
+    // 绑定日志系统
+    esp_idf_svc::log::EspLogger::initialize_default();
+
+    // 运行异步主函数
+    block_on(run())
 }

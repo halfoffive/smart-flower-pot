@@ -36,28 +36,33 @@ impl<'d> WaterPumpController<'d> {
             pump2_pin,
         })
     }
-    
+
     /// 启动水泵 1
     pub fn start_pump1(&mut self) -> Result<()> {
-        self.pump1_pin.set_high()
+        self.pump1_pin
+            .set_high()
             .map_err(|e| anyhow::anyhow!("启动水泵 1 失败: {:?}", e))?;
         log::debug!("水泵 1 启动");
         Ok(())
     }
-    
+
     /// 启动水泵 2
+    #[allow(dead_code)]
     pub fn start_pump2(&mut self) -> Result<()> {
-        self.pump2_pin.set_high()
+        self.pump2_pin
+            .set_high()
             .map_err(|e| anyhow::anyhow!("启动水泵 2 失败: {:?}", e))?;
         log::debug!("水泵 2 启动");
         Ok(())
     }
-    
+
     /// 停止所有水泵
     pub fn stop_all(&mut self) -> Result<()> {
-        self.pump1_pin.set_low()
+        self.pump1_pin
+            .set_low()
             .map_err(|e| anyhow::anyhow!("停止水泵 1 失败: {:?}", e))?;
-        self.pump2_pin.set_low()
+        self.pump2_pin
+            .set_low()
             .map_err(|e| anyhow::anyhow!("停止水泵 2 失败: {:?}", e))?;
         log::debug!("所有水泵已停止");
         Ok(())

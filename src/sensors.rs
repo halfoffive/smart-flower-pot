@@ -8,6 +8,7 @@ use esp_idf_svc::hal::gpio::AnyIOPin;
 /// 土壤湿度传感器
 pub struct SoilMoistureSensor {
     /// 传感器引脚编号 (用于模拟读取)
+    #[allow(dead_code)]
     pin_number: u8,
 }
 
@@ -27,17 +28,17 @@ impl SoilMoistureSensor {
 
         Ok(Self { pin_number })
     }
-    
+
     /// 读取土壤湿度值 (0-4095)
-    /// 
+    ///
     /// 返回值越高表示土壤越干燥
-    /// 
+    ///
     /// 注意: 这里返回模拟值,实际应读取 ADC
     pub fn read_moisture(&mut self) -> Result<u16> {
         // TODO: 实现真实的 ADC 读取
         // 这里返回一个模拟值用于测试
         let simulated_value: u16 = 2000;
-        
+
         log::debug!("读取土壤湿度 (模拟值): {}", simulated_value);
         Ok(simulated_value)
     }

@@ -432,7 +432,7 @@ void checkWatering() {
     case STATE_WATERING: {
       // 安全超时检查：防止传感器故障导致无限浇水
       if (millis() - wateringStartTime > MAX_WATERING_MS) {
-        Serial.println("[系统] ⚠ 灌溉超时（60秒），强制停止！");
+        Serial.println("[系统] ⚠ 灌溉超时（5秒），强制停止！");
         stopPump();
         systemState = STATE_IDLE;
         break;
@@ -565,11 +565,11 @@ void loop() {
   // 根据系统状态选择不同的检测间隔
   unsigned long interval;
   if (manualOverride) {
-    interval = WATERING_INTERVAL_MS;  // 手动模式下 100ms 高频检测
+    interval = WATERING_INTERVAL_MS;  // 手动模式下 200ms 高频检测
   } else if (systemState == STATE_WATERING) {
-    interval = WATERING_INTERVAL_MS;  // 灌溉态：100ms 高频检测
+    interval = WATERING_INTERVAL_MS;  // 灌溉态：200ms 高频检测
   } else {
-    interval = IDLE_INTERVAL_MS;      // 空闲态：30s 低频检测
+    interval = IDLE_INTERVAL_MS;      // 空闲态：5s 低频检测
   }
 
   if (now - lastReadTime >= interval) {

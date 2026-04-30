@@ -1,5 +1,22 @@
 # 更新日志
 
+## [1.1.0] — 2026-04-30
+
+### 新增
+- **PWA 支持**：manifest.json + Service Worker（Network-First 离线缓存），可安装到桌面/主屏幕独立运行
+- **自定义提示框**：替代浏览器默认 `alert()`，基于 Tailwind CSS 暗色主题的模态对话框 `showAlert` + 轻量通知 `showToast`
+- **SVG 图标**：emerald 色圆角方形背景 + 白色幼苗图案，同时用作 favicon 和 PWA 图标
+
+### 变更
+- 升级 `@tailwindcss/vite` 和 `tailwindcss` 至 `^4.2.4`
+- `web/src/main.js` / `web/src/test.js` 中所有 `alert()` 调用替换为 `showAlert()`
+- `showToast` 从 `main.js` 内联函数抽取为共享模块 `web/src/toast.js`
+
+### 架构
+- `web/src/toast.js` — 函数式自定义提示框模块（`showAlert` / `showToast`）
+- `web/src/sw-register.js` — Service Worker 注册（仅生产环境生效）
+- `web/public/` — 静态资源目录（`manifest.json`、`sw.js`、`icon.svg`）
+
 ## [1.0.0] — 2026-04-30
 
 ### 新增

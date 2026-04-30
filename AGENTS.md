@@ -26,10 +26,17 @@ No test, lint, or typecheck scripts exist.
 
 The build produces two HTML entrypoints via `vite.config.js` (`rollupOptions.input`). Do **not** add new pages without registering them there.
 
-- `index.html` → `src/main.js` → `src/ui.js`, `src/ble.js`, `src/settings.js`, `src/history.js`
+- `index.html` → `src/main.js` → `src/ui.js`, `src/ble.js`, `src/settings.js`, `src/history.js`, `src/toast.js`, `src/sw-register.js`
 - `test.html` → `src/test.js` (standalone manual pump control)
 
 Tailwind CSS 4 uses the `@tailwindcss/vite` plugin — the entry is a single `@import "tailwindcss"` in `src/style.css`. Do not install PostCSS or autoprefixer separately.
+
+### PWA
+
+- `public/manifest.json` — installable web app manifest (standalone display, emerald theme)
+- `public/sw.js` — Service Worker with Network-First caching strategy (offline fallback)
+- `public/icon.svg` — SVG icon used as both favicon and PWA app icon
+- `src/sw-register.js` — SW registration module, only activates in production (`import.meta.env.PROD`) to avoid interfering with Vite HMR in dev
 
 ### ESP32 firmware
 

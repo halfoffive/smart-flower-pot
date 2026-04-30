@@ -17,6 +17,8 @@
 
 - **自动灌溉**：土壤湿度低于（或高于）阈值时自动浇水，温湿度越界自动停止
 - **BLE 远程控制**：通过 Web 蓝牙连接，实时查看传感器数据、调整灌溉参数
+- **PWA 离线支持**：可安装到桌面独立运行，断网时缓存已访问页面（Network-First 策略）
+- **自定义 UI 提示**：Tailwind 暗色风格模态对话框 + Toast 通知，替代浏览器原生弹窗
 - **手动测试页**：独立页面，可手动控制水泵正反转和转速
 - **持久化存储**：设置保存在 ESP32 NVS 闪存中，断电不丢失
 - **能效优化**：空闲时长周期检测（5秒），灌溉/手动时高频检测（200毫秒）
@@ -35,6 +37,10 @@ smart-flower-pot/
 │   ├── test.html                    # 测试页（手动水泵控制）
 │   ├── package.json
 │   ├── vite.config.js
+│   ├── public/
+│   │   ├── manifest.json            # PWA 清单
+│   │   ├── sw.js                    # Service Worker（离线缓存）
+│   │   └── icon.svg                 # PWA / Favicon 图标
 │   └── src/
 │       ├── style.css                # Tailwind CSS 入口
 │       ├── main.js                  # 主页入口
@@ -42,6 +48,8 @@ smart-flower-pot/
 │       ├── ble.js                   # Web Bluetooth 封装
 │       ├── settings.js              # 设置序列化/反序列化
 │       ├── ui.js                    # 主页 UI 组件
+│       ├── toast.js                 # 自定义提示框（showAlert / showToast）
+│       ├── sw-register.js           # Service Worker 注册
 │       └── history.js               # 传感器历史缓存
 ├── README.md
 └── CHANGELOG.md
@@ -84,6 +92,14 @@ npm run dev
 - **手动水泵控制**：正转 / 反转切换，PWM 转速实时调节
 - **实时传感器读数**：温度、湿度、土壤 ADC 同步更新
 - ⚠ 手动模式会暂时覆盖自动灌溉逻辑
+
+#### PWA（可安装到桌面）
+生产构建后，通过 `npm run preview` 预览。Chrome/Edge 地址栏会出现「安装」按钮，或通过菜单 → "安装此站点"将应用添加到桌面。安装后：
+- 独立窗口运行（无浏览器地址栏/标签页）
+- 离线缓存已访问页面，断网仍可打开
+- 桌面图标 / 启动画面使用 SVG 图标
+
+> 开发模式（`npm run dev`）下 Service Worker 不会注册，避免干扰 HMR 热更新。
 
 ## BLE 协议
 
@@ -140,6 +156,7 @@ npm run dev
 | 通信 | Bluetooth Low Energy 5.0 (128-bit UUID) |
 | 前端框架 | Vite 8.0 |
 | UI 库 | Tailwind CSS 4.2 |
+| PWA | Manifest + Service Worker（离线缓存） |
 | 浏览器 API | Web Bluetooth API |
 
 ## 许可证

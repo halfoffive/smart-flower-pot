@@ -159,6 +159,15 @@ npm run dev
 | PWA | Manifest + Service Worker（离线缓存） |
 | 浏览器 API | Web Bluetooth API |
 
+## AI 开发
+
+本项目使用 AI 开发，相关信息：
+
+| 模型 | Tokens | 消费金额 |
+|------|------|------|
+| deepseek-v4-pro | 7356991 | 2.1447948 |
+
+
 ## 许可证
 
 MIT

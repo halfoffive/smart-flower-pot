@@ -8,9 +8,11 @@
  * - 设置输入 → 仅更新内存状态，不重绘
  */
 
+import './sw-register.js'
 import { connect, disconnect, readSettings, writeSettings, isConnected } from './ble.js'
 import { serializeSettings, deserializeSettings, deserializeSensor, DEFAULT_SETTINGS } from './settings.js'
 import { render, updateDashboard } from './ui.js'
+import { showToast, showAlert } from './toast.js'
 
 // ── 应用状态 ──
 let currentSettings = { ...DEFAULT_SETTINGS }  // 当前设置（本地副本）
@@ -59,12 +61,12 @@ async function handleConnect() {
     fullRender()
   } catch (error) {
     console.error('连接失败:', error)
-    alert(
-      '连接失败，请确保：\n' +
+    showAlert(
       '1. ESP32-C6 已上电且运行\n' +
       '2. 电脑蓝牙已开启\n' +
       '3. 设备未被其他页面占用\n' +
-      '4. 浏览器支持 Web Bluetooth (Chrome/Edge)'
+      '4. 浏览器支持 Web Bluetooth (Chrome/Edge)',
+      '连接失败'
     )
   }
 }
@@ -80,7 +82,7 @@ function handleDisconnect() {
 // ── 保存设置 ──
 async function handleSaveSettings() {
   if (!isConnected()) {
-    alert('请先连接设备')
+    showAlert('请先连接设备', '提示')
     return
   }
   try {
@@ -89,7 +91,7 @@ async function handleSaveSettings() {
     showToast('✅ 设置已保存到设备')
   } catch (error) {
     console.error('保存设置失败:', error)
-    alert('保存失败: ' + error.message)
+    showAlert('保存失败: ' + error.message, '错误')
   }
 }
 
@@ -97,18 +99,6 @@ async function handleSaveSettings() {
 function handleSettingChange(key, value) {
   currentSettings = { ...currentSettings, [key]: value }
   // 不调用 fullRender() —— 文本框自身已显示用户输入的值
-}
-
-// ── 轻量 Toast 提示 ──
-function showToast(msg) {
-  const toast = document.createElement('div')
-  toast.className = 'fixed bottom-6 left-1/2 -translate-x-1/2 bg-emerald-600 text-white px-5 py-3 rounded-xl shadow-lg text-sm font-medium z-50 transition-opacity'
-  toast.textContent = msg
-  document.body.appendChild(toast)
-  setTimeout(() => {
-    toast.style.opacity = '0'
-    setTimeout(() => toast.remove(), 300)
-  }, 1500)
 }
 
 // ── 首次渲染 ──

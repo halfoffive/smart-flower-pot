@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- 圆角方形背景（emerald 色，匹配主题色） -->
+  <rect width="512" height="512" rx="120" fill="#059669"/>
+  <!-- 白色幼苗图标：茎 + 三片叶子 -->
+  <g transform="translate(256,280)" fill="#fff">
+    <!-- 茎 -->
+    <rect x="-8" y="-140" width="16" height="160" rx="8"/>
+    <!-- 左叶 -->
+    <ellipse cx="-52" cy="-70" rx="48" ry="26" transform="rotate(-40 -52 -70)"/>
+    <!-- 右叶 -->
+    <ellipse cx="52" cy="-70" rx="48" ry="26" transform="rotate(40 52 -70)"/>
+    <!-- 顶叶 -->
+    <ellipse cx="0" cy="-132" rx="32" ry="22"/>
+  </g>
+</svg>

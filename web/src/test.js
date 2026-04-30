@@ -3,8 +3,10 @@
  * 功能：手动控制水泵（正转/反转/停止 + 调速）+ 传感器实时读数
  */
 
+import './sw-register.js'
 import { connect, disconnect, readSettings, writeSettings, isConnected } from './ble.js'
 import { serializeSettings, deserializeSettings, deserializeSensor, DEFAULT_SETTINGS } from './settings.js'
+import { showAlert } from './toast.js'
 
 // ── 状态 ──
 let currentSettings = { ...DEFAULT_SETTINGS }  // 当前设置
@@ -181,7 +183,7 @@ function bindEvents() {
   const btnStart = document.getElementById('btn-start')
   if (btnStart) {
     btnStart.onclick = async () => {
-      if (!isConnected()) return alert('设备已断开')
+      if (!isConnected()) return showAlert('设备已断开', '错误')
       try {
         // 写入 pumpSpeed > 0 使 ESP32 进入手动模式并启动水泵
         const startSettings = {
@@ -193,7 +195,7 @@ function bindEvents() {
         console.log('[手动控制] 启动水泵, 方向:', startSettings.waterDirection === 0 ? '正转' : '反转',
                     '转速:', startSettings.pumpSpeed)
       } catch (e) {
-        alert('操作失败: ' + e.message)
+        showAlert('操作失败: ' + e.message, '错误')
       }
     }
   }
@@ -202,7 +204,7 @@ function bindEvents() {
   const btnStop = document.getElementById('btn-stop')
   if (btnStop) {
     btnStop.onclick = async () => {
-      if (!isConnected()) return alert('设备已断开')
+      if (!isConnected()) return showAlert('设备已断开', '错误')
       try {
         // 写入 pumpSpeed = 0 使 ESP32 退出手动模式并停止水泵
         const stopSettings = { ...currentSettings, pumpSpeed: 0 }
@@ -210,7 +212,7 @@ function bindEvents() {
         await writeSettings(buf)
         console.log('[手动控制] 停止水泵')
       } catch (e) {
-        alert('操作失败: ' + e.message)
+        showAlert('操作失败: ' + e.message, '错误')
       }
     }
   }
@@ -262,12 +264,12 @@ async function handleConnect() {
     refreshUI()
   } catch (error) {
     console.error('连接失败:', error)
-    alert(
-      '连接失败，请确保：\n' +
+    showAlert(
       '1. ESP32-C6 已上电\n' +
       '2. 蓝牙已开启\n' +
       '3. 使用 Chrome/Edge 浏览器\n' +
-      '4. 设备未被其他标签页占用'
+      '4. 设备未被其他标签页占用',
+      '连接失败'
     )
   }
 }

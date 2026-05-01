@@ -266,11 +266,13 @@ function rowInputCol(label, key, value) {
 // ═══════════════════════════════════════════
 
 function bindEvents(container, state) {
-  // 连接/断开按钮
-  const btnConnect = container.querySelector('[data-action="connect"]')
-  const btnDisconnect = container.querySelector('[data-action="disconnect"]')
-  if (btnConnect) btnConnect.onclick = state.onConnect
-  if (btnDisconnect) btnDisconnect.onclick = state.onDisconnect
+  // 连接/断开按钮（可能有多个，如头部+空状态各一个）
+  container.querySelectorAll('[data-action="connect"]').forEach(btn => {
+    btn.onclick = state.onConnect
+  })
+  container.querySelectorAll('[data-action="disconnect"]').forEach(btn => {
+    btn.onclick = state.onDisconnect
+  })
 
   // 保存按钮
   const btnSave = container.querySelector('[data-action="save"]')

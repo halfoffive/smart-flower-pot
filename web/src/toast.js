@@ -24,20 +24,20 @@ export function showAlert(msg, title = '提示') {
 
   // ── 遮罩层（半透明背景 + 毛玻璃效果） ──
   const overlay = document.createElement('div')
-  overlay.className = 'fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4'
+  overlay.className = 'fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm px-4'
   overlay.style.opacity = '0'
   overlay.style.transition = 'opacity 200ms ease'
 
   // ── 对话框卡片 ──
   const dialog = document.createElement('div')
-  dialog.className = 'bg-gray-900 border border-gray-800 rounded-2xl p-6 w-full max-w-sm shadow-2xl'
-  dialog.style.transform = 'scale(0.95)'
-  dialog.style.transition = 'transform 200ms ease'
+  dialog.className = 'bg-gray-800 border border-gray-700/50 rounded-2xl p-6 w-full max-w-sm shadow-[0_0_40px_rgba(0,0,0,0.5)]'
+  dialog.style.transform = 'scale(0.95) translateY(8px)'
+  dialog.style.transition = 'transform 250ms ease'
 
   // 标题行（图标 + 标题文字）
   const header = document.createElement('div')
-  header.className = 'flex items-center gap-2 mb-3'
-  header.innerHTML = '<span class="text-xl">⚠️</span><h3 class="text-lg font-bold text-white"></h3>'
+  header.className = 'flex items-center gap-2 mb-4'
+  header.innerHTML = '<span class="text-xl">⚠️</span><h3 class="text-base font-bold text-white"></h3>'
   header.querySelector('h3').textContent = title
   dialog.appendChild(header)
 
@@ -47,9 +47,9 @@ export function showAlert(msg, title = '提示') {
   msgEl.textContent = msg
   dialog.appendChild(msgEl)
 
-  // 确认按钮
+  // 确认按钮（渐变）
   const btn = document.createElement('button')
-  btn.className = 'mt-4 w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-medium text-sm transition-colors'
+  btn.className = 'mt-5 w-full py-2.5 bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white rounded-xl font-medium text-sm transition-all duration-200 active:scale-[0.98] shadow-lg shadow-emerald-900/20'
   btn.textContent = '确定'
   dialog.appendChild(btn)
 
@@ -59,10 +59,10 @@ export function showAlert(msg, title = '提示') {
   // ── 关闭逻辑（带动画出场） ──
   const close = () => {
     overlay.style.opacity = '0'
-    dialog.style.transform = 'scale(0.95)'
+    dialog.style.transform = 'scale(0.95) translateY(8px)'
     // 恢复背景滚动
     document.body.style.overflow = prevOverflow
-    setTimeout(() => overlay.remove(), 200)
+    setTimeout(() => overlay.remove(), 250)
   }
 
   // ── 事件绑定 ──
@@ -84,7 +84,7 @@ export function showAlert(msg, title = '提示') {
   // ── 入场动画（下一帧触发 CSS 过渡） ──
   requestAnimationFrame(() => {
     overlay.style.opacity = '1'
-    dialog.style.transform = 'scale(1)'
+    dialog.style.transform = 'scale(1) translateY(0)'
   })
 }
 
@@ -99,11 +99,11 @@ export function showAlert(msg, title = '提示') {
  * @param {'success'|'error'|'info'} [type='success'] — 通知类型，决定底色
  */
 export function showToast(msg, type = 'success') {
-  // 颜色映射
-  const colorMap = {
-    success: 'bg-emerald-600',
-    error:   'bg-red-600',
-    info:    'bg-blue-600',
+  // 颜色映射（渐变风格）
+  const styleMap = {
+    success: 'bg-gradient-to-r from-emerald-500 to-emerald-600 shadow-emerald-900/30',
+    error:   'bg-gradient-to-r from-red-500 to-red-600 shadow-red-900/30',
+    info:    'bg-gradient-to-r from-blue-500 to-blue-600 shadow-blue-900/30',
   }
 
   const toast = document.createElement('div')
@@ -111,7 +111,7 @@ export function showToast(msg, type = 'success') {
     'fixed bottom-6 left-1/2 z-40 px-5 py-3 rounded-xl shadow-lg',
     'text-sm font-medium text-white pointer-events-none',
     'transition-all duration-300',
-    colorMap[type] || colorMap.success,
+    styleMap[type] || styleMap.success,
   ].join(' ')
 
   // 初始位置（略微下移，用于入场动画）

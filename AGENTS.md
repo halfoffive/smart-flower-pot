@@ -29,7 +29,7 @@ The build produces two HTML entrypoints via `vite.config.js` (`rollupOptions.inp
 - `index.html` → `src/main.js` → `src/ui.js`, `src/ble.js`, `src/settings.js`, `src/history.js`, `src/toast.js`, `src/sw-register.js`
 - `test.html` → `src/test.js` (standalone manual pump control)
 
-Tailwind CSS 4 uses the `@tailwindcss/vite` plugin — the entry is a single `@import "tailwindcss"` in `src/style.css`. Do not install PostCSS or autoprefixer separately.
+Tailwind CSS 4 uses the `@tailwindcss/vite` plugin — the entry is `@import "tailwindcss"` plus a `@theme` block for custom keyframe animations (`animate-pulse-dot`, `animate-slide-up`, `animate-fade-in`, `animate-card-in`) in `src/style.css`. Do not install PostCSS or autoprefixer separately.
 
 ### PWA
 

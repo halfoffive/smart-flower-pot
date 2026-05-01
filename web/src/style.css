@@ -1,1 +1,32 @@
 @import "tailwindcss";
+
+/* ═══════════════════════════════════════════
+   自定义动画（Tailwind 4 @theme 扩展）
+   ═══════════════════════════════════════════ */
+
+@theme {
+  --animate-pulse-dot: pulse-dot 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  --animate-slide-up: slide-up 300ms ease-out;
+  --animate-fade-in: fade-in 300ms ease-out;
+  --animate-card-in: card-in 400ms ease-out both;
+
+  @keyframes pulse-dot {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(0.75); }
+  }
+
+  @keyframes slide-up {
+    from { opacity: 0; transform: translateY(12px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes fade-in {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+  }
+
+  @keyframes card-in {
+    from { opacity: 0; transform: translateY(16px) scale(0.97); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+  }
+}

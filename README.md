@@ -18,7 +18,7 @@
 - **自动灌溉**：土壤湿度低于（或高于）阈值时自动浇水，温湿度越界自动停止
 - **BLE 远程控制**：通过 Web 蓝牙连接，实时查看传感器数据、调整灌溉参数
 - **PWA 离线支持**：可安装到桌面独立运行，断网时缓存已访问页面（Network-First 策略）
-- **自定义 UI 提示**：Tailwind 暗色风格模态对话框 + Toast 通知，替代浏览器原生弹窗
+- **毛玻璃 UI 设计**：Tailwind 暗色主题 + 毛玻璃卡片 + 渐变按钮 + 入场动画 + 状态脉冲指示
 - **手动测试页**：独立页面，可手动控制水泵正反转和转速
 - **持久化存储**：设置保存在 ESP32 NVS 闪存中，断电不丢失
 - **能效优化**：空闲时长周期检测（5秒），灌溉/手动时高频检测（200毫秒）
@@ -33,7 +33,7 @@ smart-flower-pot/
 │   └── smart_flower_pot/            # Arduino IDE 目录（必须与 .ino 同名）
 │       └── smart_flower_pot.ino     # ESP32-C6 固件
 ├── web/
-│   ├── index.html                   # 主页（仪表盘 + 设置 + 历史）
+│   ├── index.html                   # 主页（仪表盘 + 设置）
 │   ├── test.html                    # 测试页（手动水泵控制）
 │   ├── package.json
 │   ├── vite.config.js
@@ -42,7 +42,7 @@ smart-flower-pot/
 │   │   ├── sw.js                    # Service Worker（离线缓存）
 │   │   └── icon.svg                 # PWA / Favicon 图标
 │   └── src/
-│       ├── style.css                # Tailwind CSS 入口
+│       ├── style.css                # Tailwind CSS 入口 + 自定义动画
 │       ├── main.js                  # 主页入口
 │       ├── test.js                  # 测试页入口
 │       ├── ble.js                   # Web Bluetooth 封装
@@ -76,21 +76,21 @@ npm install
 npm run dev
 ```
 
-浏览器打开 `http://localhost:5173`，点击「连接」按钮配对智能花盆。
+浏览器打开 `http://localhost:5173`，点击「连接设备」按钮配对智能花盆。
 
 > **注意**：Web Bluetooth 仅支持 Chrome / Edge 等 Chromium 内核浏览器。
 
 ### 3. 使用说明
 
 #### 主页 (`/`)
-- **传感器仪表盘**：实时显示温度、空气湿度、土壤 ADC 值、水泵状态
-- **灌溉设置**：调整温度区间、湿度区间、土壤阈值、比较模式、水泵转速、浇水方向
+- **传感器仪表盘**：2x2 卡片布局，实时显示温度、空气湿度、土壤 ADC 值、水泵状态，带左侧彩色边框和图标
+- **灌溉设置**：分组表单（温度区间 / 湿度区间 / 土壤阈值 / 水泵控制），数字输入 + 下拉选择
 - **保存按钮**：将设置写入 ESP32 并持久化存储
-- **历史记录**：BLE 连接期间缓存最近 50 条数据
+- **连接状态**：头部连接状态指示点（绿色脉冲 = 已连接，灰色 = 未连接）
 
 #### 测试页 (`/test.html`)
-- **手动水泵控制**：正转 / 反转切换，PWM 转速实时调节
-- **实时传感器读数**：温度、湿度、土壤 ADC 同步更新
+- **手动水泵控制**：正转 / 反转切换按钮，PWM 转速滑块实时调节
+- **实时传感器读数**：温度、湿度、土壤 ADC 三列同步更新
 - ⚠ 手动模式会暂时覆盖自动灌溉逻辑
 
 #### PWA（可安装到桌面）
@@ -155,7 +155,7 @@ npm run dev
 | 固件 | Arduino (ESP32-C6), BLE, Preferences/NVS, DHT |
 | 通信 | Bluetooth Low Energy 5.0 (128-bit UUID) |
 | 前端框架 | Vite 8.0 |
-| UI 库 | Tailwind CSS 4.2 |
+| UI 库 | Tailwind CSS 4.2（毛玻璃卡片 + 自定义动画） |
 | PWA | Manifest + Service Worker（离线缓存） |
 | 浏览器 API | Web Bluetooth API |
 

@@ -19,6 +19,50 @@ let currentSettings = { ...DEFAULT_SETTINGS }  // 当前设置（本地副本）
 let currentSensor   = null                      // 最新传感器数据
 let connected       = false                     // BLE 连接状态
 
+// ── 主题（暗黑/浅色）初始化与切换 ──
+// 使用 Tailwind dark 模式，通过在根元素上添加/移除 .dark 来切换主题。
+function applyTheme(isDark) {
+  const root = document.documentElement
+  if (isDark) {
+    root.classList.add('dark')
+  } else {
+    root.classList.remove('dark')
+  }
+  try {
+    localStorage.setItem('theme', isDark ? 'dark' : 'light')
+  } catch (e) {
+    // 本地存储可能不可用，忽略
+  }
+}
+
+function isSystemDark() {
+  try {
+    return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
+  } catch {
+    return false
+  }
+}
+
+// 初始主题：优先本地存储，其次操作系统偏好
+function initTheme() {
+  let isDark = false
+  try {
+    const saved = localStorage.getItem('theme')
+    if (saved === 'dark') isDark = true
+    else if (saved === 'light') isDark = false
+    else isDark = isSystemDark()
+  } catch {
+    isDark = isSystemDark()
+  }
+  applyTheme(isDark)
+}
+
+// 主题切换回调（供 UI 使用）
+function toggleTheme() {
+  const currentlyDark = document.documentElement.classList.contains('dark')
+  applyTheme(!currentlyDark)
+}
+
 const app = document.getElementById('app')      // 挂载容器
 
 // ── 全量渲染（仅连接/断开时） ──
@@ -31,6 +75,7 @@ function fullRender() {
     onDisconnect:     handleDisconnect,
     onSaveSettings:   handleSaveSettings,
     onSettingChange:  handleSettingChange,
+    onToggleTheme:      toggleTheme,
   })
 }
 
@@ -102,4 +147,5 @@ function handleSettingChange(key, value) {
 }
 
 // ── 首次渲染 ──
+initTheme()
 fullRender()

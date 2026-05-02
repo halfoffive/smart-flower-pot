@@ -61,3 +61,13 @@ Binary, Little-Endian, fixed-length buffers. Settings = 11 bytes, sensor data = 
 - The firmware's `MAX_WATERING_MS` is **5000 (5 seconds)**, not 60 seconds. The README has a stale mention of 60s in one section — trust the code.
 - `vite.config.js` uses CommonJS `path` module via `import` — Vite handles this, but do not convert to `import.meta.url` without verifying the multi-page build still resolves paths correctly.
 - There is no CI, no pre-commit hooks, and no automated testing of any kind.
+
+## Build Plan (当前任务)
+- Implement UI improvements in web/:
+  - 给所有卡片添加统一入场动画（确保无障碍友好、可观测性好）
+  - 新增深色/浅色模式切换，主题状态持久化，优先 OS 主题偏好
+  - 尽量采用函数式编程风格，提取纯函数、减少副作用
+  - 增加中文注释，关键逻辑处提供简短解释
+- 文档更新：更新 README、CHANGELOG、AGENTS.md，描述改动与使用方法
+- 提交策略：分阶段提交，确保每次提交都可回滚，逐步验收
+- 验证点：两入口页 index.html/test.html 的一致性、主题在不同场景的可用性、动画在不同浏览器的表现

@@ -62,7 +62,8 @@ export function updateDashboard(sensor) {
 
 // 顶部连接栏
 function buildHeader({ connected }) {
-  const header = el('div', 'flex items-center justify-between bg-gray-800/70 backdrop-blur rounded-2xl p-4 shadow-lg border border-gray-700/50')
+  // header 也作为一个卡片元素，加入进入动画
+  const header = el('div', 'flex items-center justify-between bg-gray-800/70 backdrop-blur rounded-2xl p-4 shadow-lg border border-gray-700/50 animate-card-in')
 
   const dotColor = connected ? 'bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.4)]' : 'bg-gray-500'
   const dotAnim = connected ? 'animate-pulse-dot' : ''
@@ -86,6 +87,7 @@ function buildHeader({ connected }) {
             }">
       ${connected ? '断开' : '连接设备'}
     </button>
+    <button data-action="toggle-theme" class="ml-2 px-3 py-2 rounded-xl text-sm bg-gray-700 hover:bg-gray-600 text-white shadow-lg">🌗</button>
   `
 
   return header
@@ -131,7 +133,7 @@ function buildDashboard(sensor) {
   const isActive = sensor.pump !== 0
   const pumpBorder = isActive ? 'border-emerald-400' : 'border-gray-700'
 
-  const card = el('div', 'grid grid-cols-2 gap-3')
+  const card = el('div', 'grid grid-cols-2 gap-3 animate-card-in')
 
   card.innerHTML = `
     <div class="bg-gray-800/70 backdrop-blur rounded-2xl p-4 border-l-4 border-orange-400 shadow-lg animate-card-in" style="animation-delay:0ms">
@@ -184,7 +186,7 @@ function buildDashboard(sensor) {
 
 // 设置表单（分组输入）
 function buildSettings(s) {
-  const panel = el('div', 'bg-gray-800/70 backdrop-blur rounded-2xl p-5 space-y-5 border border-gray-700/50 shadow-lg')
+  const panel = el('div', 'bg-gray-800/70 backdrop-blur rounded-2xl p-5 space-y-5 border border-gray-700/50 shadow-lg animate-card-in')
 
   panel.innerHTML = `
     <div class="flex items-center gap-2">
@@ -294,6 +296,10 @@ function bindEvents(container, state) {
       state.onSettingChange(key, value)
     }
   })
+
+  // 主题切换按钮
+  const btnTheme = container.querySelector('[data-action="toggle-theme"]')
+  if (btnTheme) btnTheme.onclick = state.onToggleTheme
 
   // 下拉选择
   container.querySelectorAll('select[data-key]').forEach(select => {

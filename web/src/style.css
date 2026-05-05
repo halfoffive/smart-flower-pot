@@ -190,17 +190,6 @@ html {
   border-color: rgb(var(--sfp-accent) / 0.4);
 }
 
-/* 设置面板卡片不使用悬停放大（交互表单） */
-.sfp-card-static {
-  background: rgb(var(--sfp-bg-card-alpha) / 0.7);
-  border: 1px solid rgb(var(--sfp-border-card) / 0.5);
-  transition: box-shadow 200ms ease;
-}
-
-.sfp-card-static:hover {
-  box-shadow: 0 4px 20px rgb(var(--sfp-shadow) / 0.1);
-}
-
 /* 输入框样式（主题感知） */
 .sfp-input {
   background: rgb(var(--sfp-bg-input));
@@ -225,6 +214,8 @@ html {
   color: rgb(var(--sfp-text-secondary));
   transition: background 150ms ease, transform 150ms ease, color 150ms ease;
   cursor: pointer;
+  white-space: nowrap;
+  user-select: none;
 }
 
 .theme-toggle-btn:hover {

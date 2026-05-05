@@ -4,7 +4,7 @@
 
 Two independent packages — no shared build, no monorepo tooling:
 
-- **`web/`** — Vite 8 + Tailwind CSS 4 frontend (multi-page: `index.html` + `test.html`)
+- **`web/`** — Vite 8 + Tailwind CSS 4 frontend (single-page: `index.html`)
 - **`esp32-c6/`** — Arduino IDE firmware for ESP32-C6 (C++, BLE, NVS)
 
 ## Commands
@@ -22,12 +22,11 @@ No test, lint, or typecheck scripts exist.
 
 ## Architecture notes
 
-### Web (Vite multi-page)
+### Web (Vite single-page)
 
-The build produces two HTML entrypoints via `vite.config.js` (`rollupOptions.input`). Do **not** add new pages without registering them there.
+The build produces one HTML entrypoint via `vite.config.js` (`rollupOptions.input`). Do **not** add new pages without registering them there.
 
 - `index.html` → `src/main.js` → `src/ui.js`, `src/ble.js`, `src/settings.js`, `src/history.js`, `src/toast.js`, `src/theme.js`, `src/sw-register.js`
-- `test.html` → `src/test.js` (standalone manual pump control)
 
 Tailwind CSS 4 uses the `@tailwindcss/vite` plugin — the entry is `@import "tailwindcss"` plus a `@theme` block for custom keyframe animations (`animate-pulse-dot`, `animate-slide-up`, `animate-fade-in`, `animate-card-in`) in `src/style.css`. Do not install PostCSS or autoprefixer separately.
 
@@ -37,7 +36,7 @@ Tailwind CSS 4 uses the `@tailwindcss/vite` plugin — the entry is `@import "ta
 - All colors use CSS custom properties (`--sfp-*`) defined in `:root` (light) and `[data-theme="dark"]` selectors in `style.css`. Components reference colors via `rgb(var(--sfp-*))` syntax.
 - Anti-flash: Inline `<script>` in `<head>` sets `data-theme` attribute before first paint.
 - Never hardcode color values (gray-800, gray-900, etc.) in component JS — always use CSS variable references.
-- The theme toggle button is self-contained (in `ui.js` and `test.js`) — it calls `toggleTheme()` then updates its own icon/text without triggering a full re-render.
+- The theme toggle button is self-contained (in `ui.js`) — it calls `toggleTheme()` then updates its own icon/text without triggering a full re-render.
 
 ### PWA
 

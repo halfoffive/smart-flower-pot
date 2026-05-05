@@ -3,13 +3,18 @@
  * 负责：连接面板、传感器仪表盘（局部更新）、设置表单（文本框输入）、主题切换
  *
  * 更新策略（性能优化）：
- * - 连接状态变化 → 全量重建
+ * - 连接状态变化 → 全量重建（所有卡片附带入场动画）
  * - 传感器数据变化 → 仅更新仪表盘卡片内容（requestAnimationFrame 节流）
  * - 设置输入变化 → 不重绘（输入框自身已显示新值）
  *
  * 主题系统：
  * - 所有颜色通过 CSS 自定义属性引用（--sfp-*），实现浅色/深色一键切换
- * - 主题切换按钮位于头部右侧，三态循环：☀️ → 🌙 → 🖥️
+ * - 主题切换按钮位于头部右侧，三态循环：☀️ 浅色 → 🌙 深色 → 🖥️ 自动
+ * - 切换时仅更新按钮自身文字，不触发全量渲染
+ *
+ * 卡片入场动画：
+ * - 所有卡片使用 animate-card-in 类 + animation-delay 实现 staggered 依次入场
+ * - 头部 → 仪表盘 × 4（0/75/150/225ms）→ 设置面板（300ms）→ 断开设操作按钮（375ms）
  */
 
 import { initTheme, getTheme, toggleTheme } from './theme.js'
@@ -19,15 +24,15 @@ import { initTheme, getTheme, toggleTheme } from './theme.js'
 // ═══════════════════════════════════════════
 
 /**
- * 根据主题模式返回按钮图标
+ * 根据主题模式返回按钮图标和提示文本
  * @param {'light'|'dark'|'auto'} mode
  * @returns {{ emoji: string, label: string }}
  */
 const getThemeIcon = (mode) => {
   const map = {
-    light: { emoji: '☀️', label: '浅色模式' },
-    dark:  { emoji: '🌙', label: '深色模式' },
-    auto:  { emoji: '🖥️', label: '跟随系统' },
+    light: { emoji: '☀️', label: '浅色' },
+    dark:  { emoji: '🌙', label: '深色' },
+    auto:  { emoji: '🖥️', label: '自动' },
   }
   return map[mode] || map.auto
 }
@@ -86,7 +91,7 @@ function applySensorUpdate(sensor) {
   const pumpCard = document.getElementById('pump-card')
   if (pumpCard) {
     pumpCard.className = isActive
-      ? 'sfp-sensor-card rounded-2xl p-4 sfp-border-l-pump shadow-lg animate-card-in'
+      ? 'sfp-sensor-card rounded-2xl p-4 sfp-border-l-pump shadow-lg'
       : 'sfp-sensor-card rounded-2xl p-4 sfp-border-l-pump-idle shadow-lg'
   }
 
@@ -109,13 +114,6 @@ function applySensorUpdate(sensor) {
  *
  * @param {HTMLElement} container - 挂载容器
  * @param {object} state - 应用状态
- * @param {object} state.settings - 当前设置
- * @param {object|null} state.sensor - 最新传感器数据
- * @param {boolean} state.connected - BLE 连接状态
- * @param {function} state.onConnect - 连接回调
- * @param {function} state.onDisconnect - 断开回调
- * @param {function} state.onSaveSettings - 保存回调
- * @param {function} state.onSettingChange - 设置变更回调
  */
 export function render(container, state) {
   container.innerHTML = ''
@@ -134,10 +132,12 @@ export function render(container, state) {
 // ═══════════════════════════════════════════
 
 /**
- * 顶部连接栏 — 包含标题、连接状态、连接/断开按钮、主题切换按钮
+ * 顶部栏 — 标题、连接状态指示、主题切换按钮
+ * 包含入场动画（首个卡片，delay: 0ms）
  */
 function buildHeader({ connected }) {
-  const header = el('div', 'flex items-center justify-between sfp-card rounded-2xl p-4 shadow-lg')
+  const header = el('div', 'flex items-center justify-between sfp-card rounded-2xl p-4 shadow-lg animate-card-in')
+  header.style.animationDelay = '0ms'
 
   const dotColor = connected
     ? 'bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.4)]'
@@ -159,28 +159,17 @@ function buildHeader({ connected }) {
         </div>
       </div>
     </div>
-    <div class="flex gap-2">
-      <!-- 主题切换按钮 -->
-      <button data-action="toggle-theme"
-              class="theme-toggle-btn w-10 h-10 flex items-center justify-center rounded-xl text-lg"
-              title="${label}">${emoji}</button>
-      <!-- 连接/断开按钮 -->
-      <button data-action="${connected ? 'disconnect' : 'connect'}"
-              class="px-5 py-2.5 rounded-xl font-medium text-sm transition-all duration-200 active:scale-95 shadow-lg ${
-                connected
-                  ? 'sfp-btn-danger'
-                  : 'sfp-btn-primary'
-              }">
-        ${connected ? '断开' : '连接设备'}
-      </button>
-    </div>
+    <!-- 主题切换按钮（带文字） -->
+    <button data-action="toggle-theme"
+            class="theme-toggle-btn flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium"
+            title="切换主题">${emoji}<span class="hidden sm:inline">${label}</span></button>
   `
 
   return header
 }
 
 /**
- * 页面主体 — 根据连接状态显示仪表盘或空状态
+ * 页面主体 — 根据连接状态显示仪表盘或空状态 + 设置面板
  */
 function buildBody(state) {
   const body = el('div', 'space-y-4')
@@ -188,6 +177,7 @@ function buildBody(state) {
   if (state.connected && state.sensor) {
     body.appendChild(buildDashboard(state.sensor))
     body.appendChild(buildSettings(state.settings))
+    body.appendChild(buildDisconnectAction())  // 断开操作卡片
   } else {
     body.appendChild(buildEmpty(state.connected))
     body.appendChild(buildSettings(state.settings))
@@ -197,10 +187,12 @@ function buildBody(state) {
 }
 
 /**
- * 未连接空状态页
+ * 未连接空状态页（含连接 CTA 按钮）
+ * 入场动画 delay: 100ms（紧随头部之后）
  */
 function buildEmpty(connected) {
   const card = el('div', 'flex flex-col items-center justify-center sfp-card rounded-2xl p-8 text-center shadow-lg animate-card-in')
+  card.style.animationDelay = '100ms'
 
   card.innerHTML = connected
     ? `
@@ -211,7 +203,7 @@ function buildEmpty(connected) {
     : `
       <span class="text-5xl mb-4">🪴</span>
       <h3 class="text-lg font-semibold text-[rgb(var(--sfp-text-primary))] mb-1">欢迎使用智能花盆</h3>
-      <p class="text-sm text-[rgb(var(--sfp-text-muted))] mb-5">点击上方按钮连接您的智能花盆设备</p>
+      <p class="text-sm text-[rgb(var(--sfp-text-muted))] mb-5">点击下方按钮连接您的智能花盆设备</p>
       <button data-action="connect" class="px-6 py-2.5 sfp-btn-primary rounded-xl font-medium text-sm transition-all duration-200 active:scale-95">连接设备</button>
     `
 
@@ -221,6 +213,7 @@ function buildEmpty(connected) {
 /**
  * 传感器仪表盘（2×2 卡片布局，含 staggered 入场动画）
  * 每个卡片带左侧彩色边框 + 图标标签 + 大号数值
+ * 入场动画 delays: 0 / 75 / 150 / 225ms
  */
 function buildDashboard(sensor) {
   const isActive = sensor.pump !== 0
@@ -230,7 +223,7 @@ function buildDashboard(sensor) {
 
   card.innerHTML = `
     <!-- 温度卡片 -->
-    <div class="sfp-sensor-card rounded-2xl p-4 sfp-border-l-temp shadow-lg animate-card-in" style="animation-delay:0ms">
+    <div class="sfp-sensor-card rounded-2xl p-4 sfp-border-l-temp shadow-lg animate-card-in" style="animation-delay:100ms">
       <div class="flex items-center gap-1.5 mb-2">
         <span class="text-xs">🌡️</span>
         <span class="text-xs text-[rgb(var(--sfp-text-muted))]">温度</span>
@@ -242,7 +235,7 @@ function buildDashboard(sensor) {
     </div>
 
     <!-- 空气湿度卡片 -->
-    <div class="sfp-sensor-card rounded-2xl p-4 sfp-border-l-hum shadow-lg animate-card-in" style="animation-delay:75ms">
+    <div class="sfp-sensor-card rounded-2xl p-4 sfp-border-l-hum shadow-lg animate-card-in" style="animation-delay:175ms">
       <div class="flex items-center gap-1.5 mb-2">
         <span class="text-xs">💧</span>
         <span class="text-xs text-[rgb(var(--sfp-text-muted))]">空气湿度</span>
@@ -254,7 +247,7 @@ function buildDashboard(sensor) {
     </div>
 
     <!-- 土壤 ADC 卡片 -->
-    <div class="sfp-sensor-card rounded-2xl p-4 sfp-border-l-soil shadow-lg animate-card-in" style="animation-delay:150ms">
+    <div class="sfp-sensor-card rounded-2xl p-4 sfp-border-l-soil shadow-lg animate-card-in" style="animation-delay:250ms">
       <div class="flex items-center gap-1.5 mb-2">
         <span class="text-xs">🌿</span>
         <span class="text-xs text-[rgb(var(--sfp-text-muted))]">土壤 ADC</span>
@@ -266,7 +259,7 @@ function buildDashboard(sensor) {
     </div>
 
     <!-- 水泵状态卡片 -->
-    <div id="pump-card" class="sfp-sensor-card rounded-2xl p-4 ${pumpBorder} shadow-lg animate-card-in" style="animation-delay:225ms">
+    <div id="pump-card" class="sfp-sensor-card rounded-2xl p-4 ${pumpBorder} shadow-lg animate-card-in" style="animation-delay:325ms">
       <div class="flex items-center gap-1.5 mb-2">
         <span class="text-xs">⚡</span>
         <span class="text-xs text-[rgb(var(--sfp-text-muted))]">水泵</span>
@@ -283,10 +276,11 @@ function buildDashboard(sensor) {
 
 /**
  * 灌溉设置表单（分组布局：温度 / 湿度 / 土壤 / 水泵）
- * 使用 sfp-card-static（无悬停放大，避免表单误触）
+ * 入场动画 delay: 400ms（仪表盘卡片之后）
  */
 function buildSettings(s) {
-  const panel = el('div', 'sfp-card-static rounded-2xl p-5 space-y-5 shadow-lg')
+  const panel = el('div', 'sfp-card rounded-2xl p-5 space-y-5 shadow-lg animate-card-in')
+  panel.style.animationDelay = '400ms'
 
   panel.innerHTML = `
     <div class="flex items-center gap-2">
@@ -353,6 +347,23 @@ function buildSettings(s) {
 }
 
 /**
+ * 断开连接操作卡片（仅已连接时显示）
+ * 入场动画 delay: 500ms（设置面板之后）
+ */
+function buildDisconnectAction() {
+  const card = el('div', 'sfp-card rounded-2xl p-4 shadow-lg animate-card-in text-center')
+  card.style.animationDelay = '500ms'
+  card.innerHTML = `
+    <p class="text-xs text-[rgb(var(--sfp-text-muted))] mb-3">设备已连接，可随时断开</p>
+    <button data-action="disconnect"
+            class="px-8 py-2.5 sfp-btn-danger rounded-xl font-medium text-sm transition-all duration-200 active:scale-95">
+      断开连接
+    </button>
+  `
+  return card
+}
+
+/**
  * 单行文本框组件（label 在上，input 在下）
  *
  * @param {string} label - 字段标签
@@ -383,7 +394,7 @@ function rowInputCol(label, key, value) {
  * @param {object} state - 应用状态（含回调函数引用）
  */
 function bindEvents(container, state) {
-  // ── 连接/断开按钮（querySelectorAll 支持多个同 action 按钮） ──
+  // ── 连接/断开按钮 ──
   container.querySelectorAll('[data-action="connect"]').forEach(btn => {
     btn.onclick = state.onConnect
   })
@@ -395,14 +406,14 @@ function bindEvents(container, state) {
   const btnSave = container.querySelector('[data-action="save"]')
   if (btnSave) btnSave.onclick = state.onSaveSettings
 
-  // ── 主题切换按钮（自包含：直接更新自身图标，无需重渲染） ──
+  // ── 主题切换按钮（自包含：直接更新自身图标和文字，无需重渲染） ──
   const btnTheme = container.querySelector('[data-action="toggle-theme"]')
   if (btnTheme) {
     btnTheme.onclick = () => {
-      const newMode = toggleTheme()        // 切换到下一模式
-      const { emoji, label } = getThemeIcon(newMode)  // 获取新图标
-      btnTheme.textContent = emoji         // 更新按钮图标
-      btnTheme.title = label               // 更新悬停提示
+      const newMode = toggleTheme()                     // 切换到下一模式
+      const { emoji, label } = getThemeIcon(newMode)     // 获取新图标和文字
+      btnTheme.innerHTML = `${emoji}<span class="hidden sm:inline">${label}</span>`  // 更新按钮内容
+      btnTheme.title = `切换主题（当前：${label}）`          // 更新悬停提示
     }
   }
 

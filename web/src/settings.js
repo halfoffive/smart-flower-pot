@@ -20,8 +20,11 @@ export const DEFAULT_SETTINGS = Object.freeze({
   soilThreshold:  2000,  // ADC 阈值
   compareMode:    0,     // 0=低于启动, 1=高于启动
   pumpSpeed:      128,   // PWM 占空比 (0-255)
-  waterDirection: 0,     // 0=正转, 1=反转
+  waterDirection: 0,     // 0=正转, 1=反转, 0xFF=仅保存不触发水泵
 })
+
+/* 仅保存设置标志：固件看到 0xFF 不触发水泵 */
+export const WATER_DIR_SAVE_ONLY = 0xFF
 
 /**
  * 将设置对象序列化为 11 字节 ArrayBuffer

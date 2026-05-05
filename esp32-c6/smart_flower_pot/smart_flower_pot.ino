@@ -73,6 +73,9 @@ enum CompareMode : uint8_t {
   MODE_ABOVE = 1   // 高于阈值时启动灌溉
 };
 
+/* 浇水方向特殊值：0xFF = 仅保存设置，不触发水泵 */
+#define WATER_DIR_SAVE_ONLY 0xFF
+
 /* ===================== 全局对象与变量 ===================== */
 DHT dht(DHT_PIN, DHT_TYPE);     // DHT11 温湿度传感器
 Preferences prefs;               // NVS 闪存存储
@@ -148,8 +151,12 @@ class SettingsCallbacks : public BLECharacteristicCallbacks {
       saveSettings();  // 立即持久化到 NVS
 
       // ── 手动控制模式检测 ──
+      // waterDirection = 0xFF 表示"仅保存设置"，不触发水泵
+      if (newDir == WATER_DIR_SAVE_ONLY) {
+        Serial.println("[设置] ✓ 仅保存设置（不触发水泵）");
+      }
       // 如果新转速 > 0 且系统空闲且自动灌溉不满足，则进入手动模式
-      if (newSpeed > 0 && systemState == STATE_IDLE && !shouldStartWatering()) {
+      else if (newSpeed > 0 && systemState == STATE_IDLE && !shouldStartWatering()) {
         manualOverride = true;
         Serial.println("[手动控制] ▶ 网页端启动水泵（手动模式）");
         startPump(newDir == 0 ? PUMP_FORWARD : PUMP_REVERSE);

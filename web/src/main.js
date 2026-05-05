@@ -11,7 +11,7 @@
 
 import './sw-register.js'
 import { connect, disconnect, readSettings, writeSettings, isConnected } from './ble.js'
-import { serializeSettings, deserializeSettings, deserializeSensor, DEFAULT_SETTINGS } from './settings.js'
+import { serializeSettings, deserializeSettings, deserializeSensor, DEFAULT_SETTINGS, WATER_DIR_SAVE_ONLY } from './settings.js'
 import { render, updateDashboard } from './ui.js'
 import { showToast, showAlert } from './toast.js'
 import { initTheme } from './theme.js'
@@ -105,6 +105,7 @@ function handleDisconnect() {
 
 /**
  * 将当前设置序列化并写入 ESP32 NVS 存储
+ * 使用 WATER_DIR_SAVE_ONLY (0xFF) 标志告知固件"仅保存设置，不触发水泵"
  */
 async function handleSaveSettings() {
   if (!isConnected()) {
@@ -112,7 +113,9 @@ async function handleSaveSettings() {
     return
   }
   try {
-    const buf = serializeSettings(currentSettings)
+    // 使用保存设置专用标志（0xFF），固件不会自动启动水泵
+    const settingsToSave = { ...currentSettings, waterDirection: WATER_DIR_SAVE_ONLY }
+    const buf = serializeSettings(settingsToSave)
     await writeSettings(buf)
     showToast('✅ 设置已保存到设备')
   } catch (error) {

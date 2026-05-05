@@ -58,6 +58,8 @@ Tailwind CSS 4 uses the `@tailwindcss/vite` plugin — the entry is `@import "ta
 
 Binary, Little-Endian, fixed-length buffers. Settings = 11 bytes, sensor data = 6 bytes. Full byte layout is in the README — the firmware and `web/src/settings.js` must agree exactly on offsets and types.
 
+**Save-only flag**: Byte [10] (`waterDirection`) = `0xFF` tells firmware to save settings without triggering pump. This prevents unintended auto-watering when user just saves config.
+
 ### Code conventions
 
 - All comments are in Chinese.

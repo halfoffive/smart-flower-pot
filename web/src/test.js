@@ -1,21 +1,56 @@
 /**
  * 智能花盆 — 测试页入口
- * 功能：手动控制水泵（正转/反转/停止 + 调速）+ 传感器实时读数
+ * 功能：手动控制水泵（正转/反转/停止 + 调速）+ 传感器实时读数 + 主题切换
+ *
+ * 设计原则：
+ * - 函数式编程：所有组件为纯函数，状态不可变更新
+ * - 主题感知：颜色通过 CSS 自定义属性引用，支持浅色/深色/自动三态
+ * - 性能优化：传感器更新通过 RAF 节流，避免高频写入导致卡顿
  */
 
 import './sw-register.js'
 import { connect, disconnect, readSettings, writeSettings, isConnected } from './ble.js'
 import { serializeSettings, deserializeSettings, deserializeSensor, DEFAULT_SETTINGS } from './settings.js'
 import { showAlert } from './toast.js'
+import { initTheme, getTheme, toggleTheme } from './theme.js'
 
-// ── 状态 ──
+// ── 状态（不可变更新风格） ──
 let currentSettings = { ...DEFAULT_SETTINGS }  // 当前设置
 let currentSensor   = null                      // 最新传感器数据
 let connected       = false                     // 连接状态
+let rafPending      = false                     // RAF 节流锁
 
 const app = document.getElementById('test-app')
 
-// ── 刷新 UI ──
+// ── 初始化主题 ──
+initTheme()
+
+// ═══════════════════════════════════════════
+//  主题图标映射（纯函数）
+// ═══════════════════════════════════════════
+
+/**
+ * 根据主题模式返回按钮图标和提示文本
+ *
+ * @param {'light'|'dark'|'auto'} mode
+ * @returns {{ emoji: string, label: string }}
+ */
+const getThemeIcon = (mode) => {
+  const map = {
+    light: { emoji: '☀️', label: '浅色模式' },
+    dark:  { emoji: '🌙', label: '深色模式' },
+    auto:  { emoji: '🖥️', label: '跟随系统' },
+  }
+  return map[mode] || map.auto
+}
+
+// ═══════════════════════════════════════════
+//  UI 刷新
+// ═══════════════════════════════════════════
+
+/**
+ * 全量刷新 UI（连接/断开/设置变更时调用）
+ */
 function refreshUI() {
   app.innerHTML = ''
 
@@ -28,19 +63,28 @@ function refreshUI() {
   }
 
   bindEvents()
-  updateSensorValues()
+  updateSensorReadout()
 }
 
 // ═══════════════════════════════════════════
-//  子组件
+//  子组件构建（纯函数，无副作用）
 // ═══════════════════════════════════════════
 
+/**
+ * 顶部栏 — 标题 + 返回链接 + 主题切换 + 连接按钮
+ */
 function buildHeader() {
   const div = document.createElement('div')
-  div.className = 'flex items-center justify-between bg-gray-800/70 backdrop-blur rounded-2xl p-4 shadow-lg border border-gray-700/50'
+  div.className = 'flex items-center justify-between sfp-card rounded-2xl p-4 shadow-lg'
 
-  const dotColor = connected ? 'bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.4)]' : 'bg-gray-500'
+  const dotColor = connected
+    ? 'bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.4)]'
+    : 'bg-[rgb(var(--sfp-dot-inactive))]'
   const dotAnim = connected ? 'animate-pulse-dot' : ''
+
+  // 当前主题图标
+  const currentTheme = getTheme()
+  const { emoji, label } = getThemeIcon(currentTheme)
 
   div.innerHTML = `
     <div class="flex items-center gap-3">
@@ -49,17 +93,23 @@ function buildHeader() {
         <h1 class="text-lg font-bold bg-gradient-to-r from-emerald-300 to-emerald-500 bg-clip-text text-transparent">手动控制测试</h1>
         <div class="flex items-center gap-1.5 mt-0.5">
           <span class="w-2 h-2 rounded-full ${dotColor} ${dotAnim}"></span>
-          <span class="text-xs text-gray-400">${connected ? '已连接' : '未连接'}</span>
+          <span class="text-xs text-[rgb(var(--sfp-text-secondary))]">${connected ? '已连接' : '未连接'}</span>
         </div>
       </div>
     </div>
     <div class="flex gap-2">
-      <a href="/" class="px-3 py-2 bg-gray-700/70 hover:bg-gray-600/70 rounded-xl text-sm no-underline text-gray-300 transition-colors border border-gray-600/30">← 主页</a>
+      <!-- 返回主页 -->
+      <a href="/" class="px-3 py-2 bg-[rgb(var(--sfp-bg-hover)/0.5)] hover:bg-[rgb(var(--sfp-bg-hover)/0.8)] rounded-xl text-sm no-underline text-[rgb(var(--sfp-text-secondary))] transition-colors border border-[rgb(var(--sfp-border)/0.3)]">← 主页</a>
+      <!-- 主题切换 -->
+      <button data-action="toggle-theme"
+              class="theme-toggle-btn w-10 h-10 flex items-center justify-center rounded-xl text-lg"
+              title="${label}">${emoji}</button>
+      <!-- 连接/断开 -->
       <button data-action="${connected ? 'disconnect' : 'connect'}"
               class="px-4 py-2 rounded-xl font-medium text-sm transition-all duration-200 active:scale-95 shadow-lg ${
                 connected
-                  ? 'bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white shadow-red-900/20'
-                  : 'bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white shadow-emerald-900/20'
+                  ? 'sfp-btn-danger'
+                  : 'sfp-btn-primary'
               }">
         ${connected ? '断开' : '连接'}
       </button>
@@ -69,41 +119,47 @@ function buildHeader() {
   return div
 }
 
+/**
+ * 未连接空状态
+ */
 function buildEmptyHint() {
   const div = document.createElement('div')
-  div.className = 'flex flex-col items-center justify-center bg-gray-800/70 backdrop-blur rounded-2xl p-8 text-center border border-gray-700/50 shadow-lg animate-card-in'
+  div.className = 'flex flex-col items-center justify-center sfp-card rounded-2xl p-8 text-center shadow-lg animate-card-in'
   div.innerHTML = `
     <span class="text-5xl mb-4">🎮</span>
-    <h3 class="text-lg font-semibold text-gray-300 mb-1">手动水泵控制</h3>
-    <p class="text-sm text-gray-500">连接设备后可手动控制水泵正反转和转速</p>
+    <h3 class="text-lg font-semibold text-[rgb(var(--sfp-text-primary))] mb-1">手动水泵控制</h3>
+    <p class="text-sm text-[rgb(var(--sfp-text-muted))]">连接设备后可手动控制水泵正反转和转速</p>
   `
   return div
 }
 
+/**
+ * 传感器实时读数面板（3 列布局）
+ */
 function buildSensorPanel() {
   const div = document.createElement('div')
-  div.className = 'bg-gray-800/70 backdrop-blur rounded-2xl p-5 space-y-4 border border-gray-700/50 shadow-lg'
+  div.className = 'sfp-card rounded-2xl p-5 space-y-4 shadow-lg'
 
   div.innerHTML = `
     <div class="flex items-center gap-2">
       <span class="text-lg">📡</span>
-      <h2 class="text-base font-bold text-gray-200">实时读数</h2>
+      <h2 class="text-base font-bold text-[rgb(var(--sfp-text-primary))]">实时读数</h2>
     </div>
     <div class="grid grid-cols-3 gap-3">
-      <div class="bg-gray-900/60 rounded-xl p-3 text-center border border-gray-700/30">
-        <div class="text-xs text-gray-500 mb-1">🌡️ 温度</div>
-        <div class="text-xl font-bold text-orange-300" id="val-temp">--</div>
-        <div class="text-xs text-gray-600">°C</div>
+      <div class="bg-[rgb(var(--sfp-bg-input)/0.6)] rounded-xl p-3 text-center border border-[rgb(var(--sfp-border)/0.3)]">
+        <div class="text-xs text-[rgb(var(--sfp-text-muted))] mb-1">🌡️ 温度</div>
+        <div class="text-xl font-bold sfp-val-temp" id="val-temp">--</div>
+        <div class="text-xs text-[rgb(var(--sfp-text-muted))]">°C</div>
       </div>
-      <div class="bg-gray-900/60 rounded-xl p-3 text-center border border-gray-700/30">
-        <div class="text-xs text-gray-500 mb-1">💧 湿度</div>
-        <div class="text-xl font-bold text-blue-300" id="val-hum">--</div>
-        <div class="text-xs text-gray-600">%</div>
+      <div class="bg-[rgb(var(--sfp-bg-input)/0.6)] rounded-xl p-3 text-center border border-[rgb(var(--sfp-border)/0.3)]">
+        <div class="text-xs text-[rgb(var(--sfp-text-muted))] mb-1">💧 湿度</div>
+        <div class="text-xl font-bold sfp-val-hum" id="val-hum">--</div>
+        <div class="text-xs text-[rgb(var(--sfp-text-muted))]">%</div>
       </div>
-      <div class="bg-gray-900/60 rounded-xl p-3 text-center border border-gray-700/30">
-        <div class="text-xs text-gray-500 mb-1">🌿 土壤</div>
-        <div class="text-xl font-bold text-amber-300" id="val-soil">--</div>
-        <div class="text-xs text-gray-600">ADC</div>
+      <div class="bg-[rgb(var(--sfp-bg-input)/0.6)] rounded-xl p-3 text-center border border-[rgb(var(--sfp-border)/0.3)]">
+        <div class="text-xs text-[rgb(var(--sfp-text-muted))] mb-1">🌿 土壤</div>
+        <div class="text-xl font-bold sfp-val-soil" id="val-soil">--</div>
+        <div class="text-xs text-[rgb(var(--sfp-text-muted))]">ADC</div>
       </div>
     </div>
   `
@@ -111,41 +167,44 @@ function buildSensorPanel() {
   return div
 }
 
+/**
+ * 水泵控制面板 — 方向选择 / 转速滑块 / 启停按钮
+ */
 function buildControlPanel() {
   const dir = currentSettings.waterDirection
   const spd = currentSettings.pumpSpeed
 
   const div = document.createElement('div')
-  div.className = 'bg-gray-800/70 backdrop-blur rounded-2xl p-5 space-y-5 border border-gray-700/50 shadow-lg'
+  div.className = 'sfp-card-static rounded-2xl p-5 space-y-5 shadow-lg'
 
   div.innerHTML = `
     <div class="flex items-center gap-2">
       <span class="text-lg">🎮</span>
-      <h2 class="text-base font-bold text-gray-200">水泵控制</h2>
+      <h2 class="text-base font-bold text-[rgb(var(--sfp-text-primary))]">水泵控制</h2>
     </div>
 
-    <!-- 方向选择 -->
+    <!-- 方向选择 — 正转 / 反转 -->
     <div>
-      <label class="text-xs text-gray-500 mb-1.5 block">方向</label>
+      <label class="text-xs text-[rgb(var(--sfp-text-muted))] mb-1.5 block">方向</label>
       <div class="flex gap-2">
         <button data-dir="0" class="flex-1 py-3 rounded-xl font-bold text-sm transition-all duration-200 active:scale-95 ${
           dir === 0
-            ? 'bg-gradient-to-r from-emerald-500 to-emerald-600 text-white shadow-lg shadow-emerald-900/20'
-            : 'bg-gray-700/50 text-gray-400 hover:bg-gray-600/50 border border-gray-600/30'
-        }"> 正转</button>
+            ? 'sfp-btn-primary'
+            : 'bg-[rgb(var(--sfp-bg-hover)/0.5)] text-[rgb(var(--sfp-text-secondary))] hover:bg-[rgb(var(--sfp-bg-hover)/0.7)] border border-[rgb(var(--sfp-border)/0.3)]'
+        }">正转</button>
         <button data-dir="1" class="flex-1 py-3 rounded-xl font-bold text-sm transition-all duration-200 active:scale-95 ${
           dir === 1
-            ? 'bg-gradient-to-r from-rose-500 to-rose-600 text-white shadow-lg shadow-rose-900/20'
-            : 'bg-gray-700/50 text-gray-400 hover:bg-gray-600/50 border border-gray-600/30'
-        }"> 反转</button>
+            ? 'sfp-btn-danger'
+            : 'bg-[rgb(var(--sfp-bg-hover)/0.5)] text-[rgb(var(--sfp-text-secondary))] hover:bg-[rgb(var(--sfp-bg-hover)/0.7)] border border-[rgb(var(--sfp-border)/0.3)]'
+        }">反转</button>
       </div>
     </div>
 
-    <!-- 转速滑块 -->
+    <!-- 转速滑块 — 0~255 PWM -->
     <div>
       <div class="flex justify-between items-center mb-1.5">
-        <span class="text-xs text-gray-500">转速</span>
-        <span class="text-xs font-mono font-semibold text-emerald-400 bg-emerald-950/30 px-2 py-0.5 rounded-lg" id="speed-label">${spd} / 255</span>
+        <span class="text-xs text-[rgb(var(--sfp-text-muted))]">转速</span>
+        <span class="text-xs font-mono font-semibold text-emerald-400 bg-[rgb(var(--sfp-accent)/0.15)] px-2 py-0.5 rounded-lg" id="speed-label">${spd} / 255</span>
       </div>
       <input type="range" id="speed-slider" min="0" max="255" value="${spd}" step="1"
              class="w-full accent-emerald-500 h-2 rounded-lg cursor-pointer" />
@@ -154,15 +213,15 @@ function buildControlPanel() {
     <!-- 启停按钮 -->
     <div class="flex gap-3">
       <button id="btn-start"
-              class="flex-1 py-3 bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 rounded-xl font-bold text-base transition-all duration-200 active:scale-[0.98] shadow-lg shadow-emerald-900/20 flex items-center justify-center gap-1.5">
+              class="flex-1 py-3 sfp-btn-primary rounded-xl font-bold text-base transition-all duration-200 active:scale-[0.98] flex items-center justify-center gap-1.5">
         <span>▶</span><span>启动</span>
       </button>
       <button id="btn-stop"
-              class="flex-1 py-3 bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 rounded-xl font-bold text-base transition-all duration-200 active:scale-[0.98] shadow-lg shadow-red-900/20 flex items-center justify-center gap-1.5">
+              class="flex-1 py-3 sfp-btn-danger rounded-xl font-bold text-base transition-all duration-200 active:scale-[0.98] flex items-center justify-center gap-1.5">
         <span>■</span><span>停止</span>
       </button>
     </div>
-    <p class="text-xs text-gray-500 text-center">⚠ 手动模式会暂时覆盖自动灌溉逻辑</p>
+    <p class="text-xs text-[rgb(var(--sfp-text-muted))] text-center">⚠ 手动模式会暂时覆盖自动灌溉逻辑</p>
   `
 
   return div
@@ -173,38 +232,50 @@ function buildControlPanel() {
 // ═══════════════════════════════════════════
 
 function bindEvents() {
-  // 连接/断开按钮
+  // ── 连接/断开 ──
   const btnConnect = document.querySelector('[data-action="connect"]')
   const btnDisconnect = document.querySelector('[data-action="disconnect"]')
   if (btnConnect) btnConnect.onclick = handleConnect
   if (btnDisconnect) btnDisconnect.onclick = handleDisconnect
 
+  // ── 主题切换（自包含，不触发重渲染） ──
+  const btnTheme = document.querySelector('[data-action="toggle-theme"]')
+  if (btnTheme) {
+    btnTheme.onclick = () => {
+      const newMode = toggleTheme()
+      const { emoji, label } = getThemeIcon(newMode)
+      btnTheme.textContent = emoji
+      btnTheme.title = label
+    }
+  }
+
   if (!connected) return
 
-  // 方向按钮
+  // ── 方向按钮 ──
   document.querySelectorAll('[data-dir]').forEach(btn => {
     btn.onclick = () => {
-      currentSettings.waterDirection = parseInt(btn.dataset.dir)
+      currentSettings = { ...currentSettings, waterDirection: parseInt(btn.dataset.dir) }
       refreshUI()
     }
   })
 
-  // 转速滑块
+  // ── 转速滑块 ──
   const speedSlider = document.getElementById('speed-slider')
   if (speedSlider) {
     speedSlider.oninput = () => {
-      currentSettings.pumpSpeed = parseInt(speedSlider.value)
+      currentSettings = { ...currentSettings, pumpSpeed: parseInt(speedSlider.value) }
       const label = document.getElementById('speed-label')
       if (label) label.textContent = `${currentSettings.pumpSpeed} / 255`
     }
   }
 
-  // 启动按钮
+  // ── 启动按钮 ──
   const btnStart = document.getElementById('btn-start')
   if (btnStart) {
     btnStart.onclick = async () => {
       if (!isConnected()) return showAlert('设备已断开', '错误')
       try {
+        // 启动时至少设置最低转速，防止水泵不转
         const startSettings = {
           ...currentSettings,
           pumpSpeed: Math.max(currentSettings.pumpSpeed, 10),
@@ -219,7 +290,7 @@ function bindEvents() {
     }
   }
 
-  // 停止按钮
+  // ── 停止按钮 ──
   const btnStop = document.getElementById('btn-stop')
   if (btnStop) {
     btnStop.onclick = async () => {
@@ -237,10 +308,13 @@ function bindEvents() {
 }
 
 // ═══════════════════════════════════════════
-//  传感器值更新
+//  传感器值更新（RAF 节流）
 // ═══════════════════════════════════════════
 
-function updateSensorValues() {
+/**
+ * 更新传感器读数显示（仅更新 DOM 文本内容）
+ */
+function updateSensorReadout() {
   if (currentSensor) {
     setText('val-temp', currentSensor.temp.toFixed(1))
     setText('val-hum',  currentSensor.hum)
@@ -248,6 +322,27 @@ function updateSensorValues() {
   }
 }
 
+/**
+ * RAF 节流的传感器更新（高频 Notify 场景下合并帧）
+ *
+ * @param {{ soil: number, temp: number, hum: number, pump: number }} sensor
+ */
+function throttledSensorUpdate(sensor) {
+  currentSensor = sensor
+  if (rafPending) return
+  rafPending = true
+  requestAnimationFrame(() => {
+    rafPending = false
+    updateSensorReadout()
+  })
+}
+
+/**
+ * 安全设置元素文本内容
+ *
+ * @param {string} id - DOM 元素 ID
+ * @param {string|number} value - 文本内容
+ */
 function setText(id, value) {
   const el = document.getElementById(id)
   if (el) el.textContent = value
@@ -260,10 +355,9 @@ function setText(id, value) {
 async function handleConnect() {
   try {
     await connect(
-      // 传感器数据回调
+      // 传感器数据回调 → RAF 节流更新
       (buffer) => {
-        currentSensor = deserializeSensor(buffer)
-        updateSensorValues()
+        throttledSensorUpdate(deserializeSensor(buffer))
       },
       // 断开回调
       () => {

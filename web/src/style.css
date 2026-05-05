@@ -1,14 +1,135 @@
 @import "tailwindcss";
 
 /* ═══════════════════════════════════════════
+   CSS 自定义属性 — 浅色 / 深色双主题
+   所有颜色通过 CSS 变量引用，实现一键切换
+   变量命名规则：--sfp-{类别}-{语义}
+   ═══════════════════════════════════════════ */
+
+/* ── 浅色主题（默认） ── */
+:root,
+[data-theme="light"] {
+  /* 页面背景 */
+  --sfp-bg-page: 243 244 246;            /* gray-100 */
+  --sfp-bg-gradient-from: 243 244 246;   /* gray-100 */
+  --sfp-bg-gradient-to: 229 231 235;     /* gray-200 */
+
+  /* 卡片 & 面板 */
+  --sfp-bg-card: 255 255 255;            /* white */
+  --sfp-bg-card-alpha: 255 255 255;      /* white（用于半透明毛玻璃） */
+
+  /* 输入框 */
+  --sfp-bg-input: 249 250 251;           /* gray-50 */
+
+  /* 悬停态背景 */
+  --sfp-bg-hover: 229 231 235;           /* gray-200 */
+
+  /* 边框颜色 */
+  --sfp-border: 209 213 219;             /* gray-300 */
+  --sfp-border-light: 229 231 235;       /* gray-200 */
+  --sfp-border-card: 229 231 235;        /* gray-200 */
+
+  /* 文字颜色 */
+  --sfp-text-primary: 17 24 39;          /* gray-900 */
+  --sfp-text-secondary: 75 85 99;        /* gray-600 */
+  --sfp-text-muted: 107 114 128;         /* gray-500 */
+  --sfp-text-on-accent: 255 255 255;     /* white（渐变按钮文字） */
+
+  /* 主题强调色（emerald 系列 — 植物/自然感） */
+  --sfp-accent: 16 185 129;              /* emerald-500 */
+  --sfp-accent-light: 52 211 153;        /* emerald-400 */
+  --sfp-accent-dark: 5 150 105;          /* emerald-600 */
+
+  /* 功能性颜色 */
+  --sfp-danger: 239 68 68;               /* red-500 */
+  --sfp-danger-light: 248 113 113;       /* red-400 */
+  --sfp-warning: 245 158 11;             /* amber-500 */
+  --sfp-info: 59 130 246;                /* blue-500 */
+
+  /* 阴影颜色 */
+  --sfp-shadow: 0 0 0;                   /* black */
+  --sfp-shadow-accent: 16 185 129;       /* emerald-500 */
+  --sfp-shadow-danger: 239 68 68;        /* red-500 */
+
+  /* 非活动状态点 */
+  --sfp-dot-inactive: 156 163 175;       /* gray-400 */
+}
+
+/* ── 深色主题 ── */
+[data-theme="dark"] {
+  --sfp-bg-page: 3 7 18;                /* gray-950 */
+  --sfp-bg-gradient-from: 17 24 39;     /* gray-900 */
+  --sfp-bg-gradient-to: 3 7 18;         /* gray-950 */
+
+  --sfp-bg-card: 31 41 55;              /* gray-800 */
+  --sfp-bg-card-alpha: 31 41 55;        /* gray-800 */
+
+  --sfp-bg-input: 17 24 39;             /* gray-900 */
+
+  --sfp-bg-hover: 55 65 81;             /* gray-700 */
+
+  --sfp-border: 55 65 81;               /* gray-700 */
+  --sfp-border-light: 75 85 99;         /* gray-600 */
+  --sfp-border-card: 55 65 81;          /* gray-700 */
+
+  --sfp-text-primary: 243 244 246;      /* gray-100 */
+  --sfp-text-secondary: 156 163 175;    /* gray-400 */
+  --sfp-text-muted: 107 114 128;        /* gray-500 */
+  --sfp-text-on-accent: 255 255 255;    /* white */
+
+  --sfp-accent: 16 185 129;             /* emerald-500 */
+  --sfp-accent-light: 52 211 153;       /* emerald-400 */
+  --sfp-accent-dark: 5 150 105;         /* emerald-600 */
+
+  --sfp-danger: 239 68 68;              /* red-500 */
+  --sfp-danger-light: 248 113 113;      /* red-400 */
+  --sfp-warning: 245 158 11;            /* amber-500 */
+  --sfp-info: 59 130 246;               /* blue-500 */
+
+  --sfp-shadow: 0 0 0;
+  --sfp-shadow-accent: 16 185 129;
+  --sfp-shadow-danger: 239 68 68;
+
+  --sfp-dot-inactive: 75 85 99;         /* gray-600 */
+}
+
+/* ═══════════════════════════════════════════
+   页面基础样式（使用 CSS 变量）
+   ═══════════════════════════════════════════ */
+
+/* body 的背景和文字色通过 CSS 变量控制，不再依赖 Tailwind 类 */
+body {
+  background: linear-gradient(
+    to bottom,
+    rgb(var(--sfp-bg-gradient-from)),
+    rgb(var(--sfp-bg-gradient-from)),
+    rgb(var(--sfp-bg-gradient-to))
+  );
+  color: rgb(var(--sfp-text-primary));
+  min-height: 100vh;
+}
+
+/* 主题切换过渡 — 背景色平滑渐变 */
+html {
+  transition: background-color 300ms ease;
+}
+
+/* ═══════════════════════════════════════════
    自定义动画（Tailwind 4 @theme 扩展）
+   使用 will-change 优化合成器性能
    ═══════════════════════════════════════════ */
 
 @theme {
+  /* 连接状态脉冲点 */
   --animate-pulse-dot: pulse-dot 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  /* 元素上滑入场 */
   --animate-slide-up: slide-up 300ms ease-out;
+  /* 淡入 */
   --animate-fade-in: fade-in 300ms ease-out;
+  /* 卡片依次入场（staggered） */
   --animate-card-in: card-in 400ms ease-out both;
+  /* 卡片悬停微放大 */
+  --animate-card-hover: card-hover 200ms ease-out;
 
   @keyframes pulse-dot {
     0%, 100% { opacity: 1; transform: scale(1); }
@@ -28,5 +149,207 @@
   @keyframes card-in {
     from { opacity: 0; transform: translateY(16px) scale(0.97); }
     to   { opacity: 1; transform: translateY(0) scale(1); }
+  }
+
+  /* 卡片悬停效果 — 微放大 + 阴影增强 */
+  @keyframes card-hover {
+    from { transform: scale(1); }
+    to   { transform: scale(1.01); }
+  }
+}
+
+/* ═══════════════════════════════════════════
+   性能提示（GPU 加速 & 渲染优化）
+   ═══════════════════════════════════════════ */
+
+/* 动画卡片预声明 will-change，让浏览器提前提升到合成层 */
+.animate-card-in {
+  will-change: transform, opacity;
+}
+
+/* 脉冲动画元素预声明 */
+.animate-pulse-dot {
+  will-change: transform, opacity;
+}
+
+/* ═══════════════════════════════════════════
+   通用卡片悬停效果
+   所有卡片统一：hover 时微放大 + 阴影加深 + 边框高亮
+   ═══════════════════════════════════════════ */
+
+/* 卡片基类 — 使用 CSS 变量实现主题感知 */
+.sfp-card {
+  background: rgb(var(--sfp-bg-card-alpha) / 0.7);
+  border: 1px solid rgb(var(--sfp-border-card) / 0.5);
+  transition: transform 200ms ease, box-shadow 200ms ease, border-color 200ms ease;
+}
+
+.sfp-card:hover {
+  transform: translateY(-2px) scale(1.01);
+  box-shadow: 0 8px 30px rgb(var(--sfp-shadow) / 0.15);
+  border-color: rgb(var(--sfp-accent) / 0.4);
+}
+
+/* 设置面板卡片不使用悬停放大（交互表单） */
+.sfp-card-static {
+  background: rgb(var(--sfp-bg-card-alpha) / 0.7);
+  border: 1px solid rgb(var(--sfp-border-card) / 0.5);
+  transition: box-shadow 200ms ease;
+}
+
+.sfp-card-static:hover {
+  box-shadow: 0 4px 20px rgb(var(--sfp-shadow) / 0.1);
+}
+
+/* 输入框样式（主题感知） */
+.sfp-input {
+  background: rgb(var(--sfp-bg-input));
+  border: 1px solid rgb(var(--sfp-border));
+  color: rgb(var(--sfp-text-primary));
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+
+.sfp-input:focus {
+  border-color: rgb(var(--sfp-accent));
+  box-shadow: 0 0 0 3px rgb(var(--sfp-accent) / 0.15);
+  outline: none;
+}
+
+/* ═══════════════════════════════════════════
+   主题切换按钮样式
+   ═══════════════════════════════════════════ */
+
+.theme-toggle-btn {
+  background: rgb(var(--sfp-bg-hover) / 0.5);
+  border: 1px solid rgb(var(--sfp-border) / 0.3);
+  color: rgb(var(--sfp-text-secondary));
+  transition: background 150ms ease, transform 150ms ease, color 150ms ease;
+  cursor: pointer;
+}
+
+.theme-toggle-btn:hover {
+  background: rgb(var(--sfp-bg-hover) / 0.8);
+  color: rgb(var(--sfp-text-primary));
+  transform: scale(1.05);
+}
+
+.theme-toggle-btn:active {
+  transform: scale(0.95);
+}
+
+/* ═══════════════════════════════════════════
+   Toast 通知主题感知
+   ═══════════════════════════════════════════ */
+
+.sfp-toast {
+  color: rgb(var(--sfp-text-on-accent));
+  font-weight: 500;
+}
+
+/* ═══════════════════════════════════════════
+   设置面板下拉框
+   ═══════════════════════════════════════════ */
+
+.sfp-select {
+  background: rgb(var(--sfp-bg-input));
+  border: 1px solid rgb(var(--sfp-border));
+  color: rgb(var(--sfp-text-primary));
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+
+.sfp-select:focus {
+  border-color: rgb(var(--sfp-accent));
+  box-shadow: 0 0 0 3px rgb(var(--sfp-accent) / 0.15);
+  outline: none;
+}
+
+/* ═══════════════════════════════════════════
+   数值卡片（传感器仪表盘）
+   ═══════════════════════════════════════════ */
+
+.sfp-sensor-card {
+  background: rgb(var(--sfp-bg-card-alpha) / 0.7);
+  transition: transform 200ms ease, box-shadow 200ms ease;
+}
+
+.sfp-sensor-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgb(var(--sfp-shadow) / 0.12);
+}
+
+/* ═══════════════════════════════════════════
+   渐变按钮基类（主题感知 emerald 渐变）
+   ═══════════════════════════════════════════ */
+
+.sfp-btn-primary {
+  background: linear-gradient(
+    to right,
+    rgb(var(--sfp-accent)),
+    rgb(var(--sfp-accent-dark))
+  );
+  color: rgb(var(--sfp-text-on-accent));
+  box-shadow: 0 4px 15px rgb(var(--sfp-shadow-accent) / 0.2);
+  transition: all 200ms ease;
+}
+
+.sfp-btn-primary:hover {
+  background: linear-gradient(
+    to right,
+    rgb(var(--sfp-accent-dark)),
+    rgb(var(--sfp-accent-dark))
+  );
+  box-shadow: 0 6px 20px rgb(var(--sfp-shadow-accent) / 0.3);
+}
+
+.sfp-btn-primary:active {
+  transform: scale(0.98);
+}
+
+/* 危险按钮（红色渐变） */
+.sfp-btn-danger {
+  background: linear-gradient(
+    to right,
+    rgb(var(--sfp-danger)),
+    rgb(var(--sfp-danger-light))
+  );
+  color: rgb(var(--sfp-text-on-accent));
+  box-shadow: 0 4px 15px rgb(var(--sfp-shadow-danger) / 0.2);
+  transition: all 200ms ease;
+}
+
+.sfp-btn-danger:hover {
+  box-shadow: 0 6px 20px rgb(var(--sfp-shadow-danger) / 0.3);
+}
+
+.sfp-btn-danger:active {
+  transform: scale(0.98);
+}
+
+/* ═══════════════════════════════════════════
+   仪表盘数值区域
+   ═══════════════════════════════════════════ */
+
+.sfp-val-temp  { color: #fb923c; }  /* orange-400 */
+.sfp-val-hum   { color: #60a5fa; }  /* blue-400 */
+.sfp-val-soil  { color: #fbbf24; }  /* amber-400 */
+.sfp-val-pump-active { color: #34d399; }  /* emerald-400 */
+.sfp-val-pump-idle   { color: rgb(var(--sfp-text-muted)); }
+
+/* 卡片左侧彩色边框 */
+.sfp-border-l-temp   { border-left: 4px solid #fb923c; }
+.sfp-border-l-hum    { border-left: 4px solid #60a5fa; }
+.sfp-border-l-soil   { border-left: 4px solid #fbbf24; }
+.sfp-border-l-pump   { border-left: 4px solid rgb(var(--sfp-accent-light)); }
+.sfp-border-l-pump-idle { border-left: 4px solid rgb(var(--sfp-border)); }
+
+/* ═══════════════════════════════════════════
+   响应式微调
+   ═══════════════════════════════════════════ */
+
+/* 移动端减少 hover 效果（触屏无 hover） */
+@media (hover: none) {
+  .sfp-card:hover,
+  .sfp-sensor-card:hover {
+    transform: none;
   }
 }

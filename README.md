@@ -18,10 +18,12 @@
 - **自动灌溉**：土壤湿度低于（或高于）阈值时自动浇水，温湿度越界自动停止
 - **BLE 远程控制**：通过 Web 蓝牙连接，实时查看传感器数据、调整灌溉参数
 - **PWA 离线支持**：可安装到桌面独立运行，断网时缓存已访问页面（Network-First 策略）
-- **毛玻璃 UI 设计**：Tailwind 暗色主题 + 毛玻璃卡片 + 渐变按钮 + 入场动画 + 状态脉冲指示
+- **浅色/深色主题切换**：三态切换（浅色 ☀️ / 深色 🌙 / 跟随系统 🖥️），localStorage 持久化，预加载防闪烁
+- **毛玻璃 UI 设计**：CSS 变量驱动主题 + 毛玻璃卡片 + 渐变按钮 + 入场动画 + 状态脉冲指示
+- **卡片动画增强**：hover 微放大 + 阴影加深 + 边框高亮 + staggered 依次入场
 - **手动测试页**：独立页面，可手动控制水泵正反转和转速
 - **持久化存储**：设置保存在 ESP32 NVS 闪存中，断电不丢失
-- **能效优化**：空闲时长周期检测（5秒），灌溉/手动时高频检测（200毫秒）
+- **能效优化**：空闲时长周期检测（5秒），灌溉/手动时高频检测（200毫秒），前端传感器更新 RAF 节流
 - **安全保护**：最长灌溉 5 秒超时，防止水泵空转；H桥方向切换带死区保护
 - **自动重连**：Web 端断开后自动尝试重连（最多 5 次）
 
@@ -42,15 +44,16 @@ smart-flower-pot/
 │   │   ├── sw.js                    # Service Worker（离线缓存）
 │   │   └── icon.svg                 # PWA / Favicon 图标
 │   └── src/
-│       ├── style.css                # Tailwind CSS 入口 + 自定义动画
-│       ├── main.js                  # 主页入口
-│       ├── test.js                  # 测试页入口
+│       ├── style.css                # Tailwind CSS 入口 + CSS 变量主题 + 自定义动画
+│       ├── main.js                  # 主页入口（编排 BLE、UI、主题）
+│       ├── test.js                  # 测试页入口（手动水泵控制 + 主题）
 │       ├── ble.js                   # Web Bluetooth 封装
-│       ├── settings.js              # 设置序列化/反序列化
-│       ├── ui.js                    # 主页 UI 组件
+│       ├── settings.js              # 设置序列化/反序列化（11 字节协议）
+│       ├── ui.js                    # 主页 UI 组件（函数式，主题感知）
+│       ├── theme.js                 # 主题管理（浅色/深色/自动三态）
 │       ├── toast.js                 # 自定义提示框（showAlert / showToast）
 │       ├── sw-register.js           # Service Worker 注册
-│       └── history.js               # 传感器历史缓存
+│       └── history.js               # 传感器历史缓存（环形队列）
 ├── README.md
 └── CHANGELOG.md
 ```
@@ -77,14 +80,6 @@ npm run dev
 ```
 
 浏览器打开 `http://localhost:5173`，点击「连接设备」按钮配对智能花盆。
-
-## 新特性与改动（本次提交摘要）
-- 卡片进入/悬停的动画效果已在全局范围落地，提升 UI 动态感与界面响应性。
-- 添加深色/浅色模式切换能力，并对主题切换进行了本地持久化存储与 OS 首选项的兼容。
-- 引入轻量级的函数式编程风格改动，减少不必要的全量重绘，提升页面渲染性能。
-- 代码中增加大量中文注释，便于开发者快速理解意图与实现要点。
-- 更新了 README、CHANGELOG、AGENTS.md，完善文档与协作指南。
-- 相关改动已提交至版本控制，请查看提交记录。 
 
 > **注意**：Web Bluetooth 仅支持 Chrome / Edge 等 Chromium 内核浏览器。
 
@@ -163,7 +158,8 @@ npm run dev
 | 固件 | Arduino (ESP32-C6), BLE, Preferences/NVS, DHT |
 | 通信 | Bluetooth Low Energy 5.0 (128-bit UUID) |
 | 前端框架 | Vite 8.0 |
-| UI 库 | Tailwind CSS 4.2（毛玻璃卡片 + 自定义动画） |
+| UI 库 | Tailwind CSS 4.2（毛玻璃卡片 + CSS 变量主题 + 自定义动画） |
+| 主题系统 | CSS 自定义属性 + localStorage 持久化（浅色/深色/自动） |
 | PWA | Manifest + Service Worker（离线缓存） |
 | 浏览器 API | Web Bluetooth API |
 

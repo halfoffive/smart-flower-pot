@@ -1,13 +1,40 @@
 # 更新日志
 
-## [Unreleased] — 2026-05-02
+## [1.3.0] — 2026-05-05
 
 ### 新增
-- UI 层：卡片进入动画全面落地，整体视觉体验提升
-- UI 层：新增深色/浅色模式切换按钮，支持本地持久化和 OS 偏好
-- 代码风格：引入函数式编程思路与中文注释，提升可维护性
-- 文档：README、AGENTS.md、CHANGELOG.md 同步更新风格与贡献指南
+- **浅色/深色主题切换**：三态切换按钮（☀️ 浅色 / 🌙 深色 / 🖥️ 跟随系统），localStorage 持久化用户偏好
+- **主题预加载防闪烁**：`<head>` 内联脚本在首帧渲染前读取主题设置，避免深色模式用户看到白色闪烁
+- **卡片 hover 动画**：所有卡片悬停时微放大（`scale(1.01)`）+ 阴影加深 + 边框高亮过渡
+- **主题管理模块**：`web/src/theme.js` — 函数式风格，支持系统 `prefers-color-scheme` 媒体查询监听
+- **传感器仪表盘卡片 hover**：2×2 传感器卡片悬停微上移（`translateY(-2px)`）+ 阴影增强，触屏设备自动禁用
 
+### 变更
+- **CSS 架构重构**：所有颜色从硬编码 Tailwind 类改为 CSS 自定义属性（`--sfp-*`），定义在 `style.css` 顶层
+  - 浅色主题：白底 + 浅灰卡片 + 深色文字
+  - 深色主题：保持原有暗色风格（gray-800/900/950 系列）
+- **HTML 模板**：`body` 背景色从 Tailwind 类改为 CSS 变量驱动的 `linear-gradient`，跟随主题切换
+- **UI 组件全面变量化**：`ui.js`、`test.js`、`toast.js` 中所有颜色引用改为 `rgb(var(--sfp-*))` 格式
+- **按钮样式抽离**：`.sfp-btn-primary`（emerald 渐变）/ `.sfp-btn-danger`（red 渐变）/ `.theme-toggle-btn` CSS 类
+- **卡片样式抽离**：`.sfp-card`（hover 动画）/ `.sfp-card-static`（无 hover）/ `.sfp-sensor-card`（仪表盘卡片）
+- **输入框样式抽离**：`.sfp-input` / `.sfp-select`（focus 边框高亮 + 阴影 ring）
+- **Toast 组件**：渐变改为动态计算（`linear-gradient` + CSS 变量），跟随主题切换
+
+### 性能优化
+- **RAF 节流传感器更新**：`main.js` 高频 Notify（~200ms 间隔）通过 `requestAnimationFrame` 合并帧，确保每秒最多 60 次 DOM 更新
+- **测试页同步优化**：`test.js` 传感器更新同样使用 RAF 节流，避免手动操作时卡顿
+- **动画声明 will-change**：`.animate-card-in` / `.animate-pulse-dot` 预声明 `will-change: transform, opacity`，让浏览器提前提升到合成层
+- **触屏设备优化**：`@media (hover: none)` 禁用 hover 动画，避免触屏误触
+
+### 修改文件
+- `web/src/style.css` — CSS 变量主题 + 卡片动画 + 性能优化 + 组件样式类
+- `web/src/theme.js` — **新增** 主题管理模块
+- `web/src/ui.js` — 主题切换按钮 + 颜色变量化 + RAF 节流 + 卡片 hover
+- `web/src/main.js` — 主题初始化 + RAF 节流传感器更新
+- `web/src/test.js` — 主题切换 + 颜色变量化 + RAF 节流
+- `web/src/toast.js` — 主题感知渐变 + CSS 变量引用
+- `web/index.html` — 主题预加载脚本 + body 简化
+- `web/test.html` — 主题预加载脚本 + body 简化
 
 ## [1.2.0] — 2026-05-01
 

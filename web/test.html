@@ -7,9 +7,21 @@
   <title>智能花盆 — 手动控制</title>
   <link rel="icon" href="/icon.svg" type="image/svg+xml" />
   <link rel="manifest" href="/manifest.json" />
+  <!-- 主题预加载 — 防闪烁 -->
+  <script>
+    (function() {
+      var m = localStorage.getItem('sfp-theme');
+      if (m === 'light' || m === 'dark') {
+        document.documentElement.setAttribute('data-theme', m);
+      } else {
+        var d = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        document.documentElement.setAttribute('data-theme', d ? 'dark' : 'light');
+      }
+    })();
+  </script>
   <link rel="stylesheet" href="/src/style.css" />
 </head>
-<body class="bg-gradient-to-b from-gray-900 via-gray-900 to-gray-950 text-gray-100 min-h-screen dark:bg-black dark:text-white">
+<body>
   <div id="test-app" class="max-w-lg mx-auto p-4 space-y-4">
     <!-- JS 动态渲染 -->
   </div>

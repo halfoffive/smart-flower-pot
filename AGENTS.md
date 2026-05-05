@@ -26,10 +26,18 @@ No test, lint, or typecheck scripts exist.
 
 The build produces two HTML entrypoints via `vite.config.js` (`rollupOptions.input`). Do **not** add new pages without registering them there.
 
-- `index.html` → `src/main.js` → `src/ui.js`, `src/ble.js`, `src/settings.js`, `src/history.js`, `src/toast.js`, `src/sw-register.js`
+- `index.html` → `src/main.js` → `src/ui.js`, `src/ble.js`, `src/settings.js`, `src/history.js`, `src/toast.js`, `src/theme.js`, `src/sw-register.js`
 - `test.html` → `src/test.js` (standalone manual pump control)
 
 Tailwind CSS 4 uses the `@tailwindcss/vite` plugin — the entry is `@import "tailwindcss"` plus a `@theme` block for custom keyframe animations (`animate-pulse-dot`, `animate-slide-up`, `animate-fade-in`, `animate-card-in`) in `src/style.css`. Do not install PostCSS or autoprefixer separately.
+
+### Theme system
+
+- **`src/theme.js`** — Theme management module. Exports `initTheme()`, `getTheme()`, `setTheme(mode)`, `toggleTheme()`. Three modes: `light`, `dark`, `auto` (follows `prefers-color-scheme` media query). User preference persisted to `localStorage` key `sfp-theme`.
+- All colors use CSS custom properties (`--sfp-*`) defined in `:root` (light) and `[data-theme="dark"]` selectors in `style.css`. Components reference colors via `rgb(var(--sfp-*))` syntax.
+- Anti-flash: Inline `<script>` in `<head>` sets `data-theme` attribute before first paint.
+- Never hardcode color values (gray-800, gray-900, etc.) in component JS — always use CSS variable references.
+- The theme toggle button is self-contained (in `ui.js` and `test.js`) — it calls `toggleTheme()` then updates its own icon/text without triggering a full re-render.
 
 ### PWA
 
@@ -52,8 +60,10 @@ Binary, Little-Endian, fixed-length buffers. Settings = 11 bytes, sensor data = 
 ### Code conventions
 
 - All comments are in Chinese.
-- Functional style in JS — avoid class-heavy patterns.
+- Functional style in JS — avoid class-heavy patterns. Pure functions preferred, immutable state updates via spread operator.
 - The web UI uses a "local-only state update" pattern: sensor updates call `updateDashboard()` (partial DOM patch), settings inputs update memory only without re-rendering.
+- Sensor updates are RAF-throttled (`requestAnimationFrame`) to prevent jank during high-frequency BLE notifications (~200ms intervals).
+- Theme changes are self-contained: the toggle button calls `toggleTheme()` and updates its own DOM without triggering full re-renders.
 
 ## Gotchas
 
@@ -61,13 +71,3 @@ Binary, Little-Endian, fixed-length buffers. Settings = 11 bytes, sensor data = 
 - The firmware's `MAX_WATERING_MS` is **5000 (5 seconds)**, not 60 seconds. The README has a stale mention of 60s in one section — trust the code.
 - `vite.config.js` uses CommonJS `path` module via `import` — Vite handles this, but do not convert to `import.meta.url` without verifying the multi-page build still resolves paths correctly.
 - There is no CI, no pre-commit hooks, and no automated testing of any kind.
-
-## Build Plan (当前任务)
-- Implement UI improvements in web/:
-  - 给所有卡片添加统一入场动画（确保无障碍友好、可观测性好）
-  - 新增深色/浅色模式切换，主题状态持久化，优先 OS 主题偏好
-  - 尽量采用函数式编程风格，提取纯函数、减少副作用
-  - 增加中文注释，关键逻辑处提供简短解释
-- 文档更新：更新 README、CHANGELOG、AGENTS.md，描述改动与使用方法
-- 提交策略：分阶段提交，确保每次提交都可回滚，逐步验收
-- 验证点：两入口页 index.html/test.html 的一致性、主题在不同场景的可用性、动画在不同浏览器的表现

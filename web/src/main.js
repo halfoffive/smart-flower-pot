@@ -54,8 +54,15 @@ async function handleConnect() {
       // 传感器数据回调 → RAF 节流局部更新
       (buffer) => {
         const data = deserializeSensor(buffer)
+        const wasNull = currentSensor === null
         currentSensor = data
-        updateDashboard(data)  // 内部已通过 RAF 节流
+        // 首次收到传感器数据：从等待状态切换到仪表盘（全量渲染）
+        // 注意：仅当 connected 为 true 时才执行（避免在 connect 未完成时提前渲染）
+        if (wasNull && connected) {
+          fullRender()
+        } else {
+          updateDashboard(data)  // 内部已通过 RAF 节流
+        }
       },
       // 断开回调 → 需要全量渲染
       () => {

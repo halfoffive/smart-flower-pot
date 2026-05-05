@@ -25,7 +25,7 @@
 // PWM_CHANNEL 在 Arduino-ESP32 3.x 中已废弃，通过引脚直接控制
 
 /* ===================== 定时参数 ===================== */
-#define IDLE_INTERVAL_MS     5000   // 空闲态检测周期 5秒
+#define IDLE_INTERVAL_MS     2000   // 空闲态检测周期 2秒
 #define WATERING_INTERVAL_MS 200    // 灌溉态检测周期 200毫秒
 #define MAX_WATERING_MS      5000  // 最长灌溉时间 5秒
 
@@ -551,6 +551,13 @@ void loop() {
   if (deviceConnected && !oldDeviceConnected) {
     oldDeviceConnected = deviceConnected;
     Serial.println("[BLE] ✓ 客户端连接事件");
+    // 【修复】连接后立即推送一次传感器数据，消除网页端首次数据等待
+    readSensors();
+    uint8_t sensorBuffer[6];
+    serializeSensorData(sensorBuffer);
+    pSensorChar->setValue(sensorBuffer, 6);
+    pSensorChar->notify();
+    lastReadTime = millis();  // 重置计时器，避免重复推送
   }
 
   if (!deviceConnected && oldDeviceConnected) {

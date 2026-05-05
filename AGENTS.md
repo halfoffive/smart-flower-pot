@@ -51,6 +51,8 @@ Tailwind CSS 4 uses the `@tailwindcss/vite` plugin — the entry is `@import "ta
 - Uses **NimBLE** (Arduino-ESP32 built-in), not the legacy Bluedroid BLE stack. CCCD descriptors are auto-managed — never add `BLE2902` includes.
 - Pin assignments are hardcoded at the top of the `.ino` file. Changing them requires matching changes in the README table and BLE protocol docs.
 - `Preferences.h` (NVS) is used for persistent storage. The namespace is `flowerpot`.
+- **Sensor polling intervals**: `IDLE_INTERVAL_MS = 2000` (2s), `WATERING_INTERVAL_MS = 200` (200ms). Idle interval was reduced from 5s for better web responsiveness.
+- **Immediate push on connect**: When a BLE client connects, the firmware immediately reads sensors and pushes a notification. This eliminates the web-side delay of waiting for the next polling cycle.
 
 ### BLE protocol
 
@@ -61,6 +63,7 @@ Binary, Little-Endian, fixed-length buffers. Settings = 11 bytes, sensor data = 
 - All comments are in Chinese.
 - Functional style in JS — avoid class-heavy patterns. Pure functions preferred, immutable state updates via spread operator.
 - The web UI uses a "local-only state update" pattern: sensor updates call `updateDashboard()` (partial DOM patch), settings inputs update memory only without re-rendering.
+- **First sensor notification**: Triggers `fullRender()` (not `updateDashboard()`) to transition from the "waiting" empty state to the dashboard view. Subsequent notifications use partial `updateDashboard()`.
 - Sensor updates are RAF-throttled (`requestAnimationFrame`) to prevent jank during high-frequency BLE notifications (~200ms intervals).
 - Theme changes are self-contained: the toggle button calls `toggleTheme()` and updates its own DOM without triggering full re-renders.
 

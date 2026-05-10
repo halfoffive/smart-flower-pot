@@ -64,7 +64,7 @@ Binary, Little-Endian, fixed-length buffers. Settings = 11 bytes, sensor data = 
 
 Binary framed protocol over USB Serial (115200 baud). Frame format: `0xAA 0x55` header + type byte + length byte + payload + XOR checksum. Types: `0x01` sensor data, `0x02` settings, `0x03` device info, `0x04` read-settings request. The firmware parses frames in `loop()` via `handleSerialCommand()` and sends sensor data after each read. Settings/sensor payloads use the exact same 11/6 byte layouts as BLE.
 
-- `web/src/serial.js` — Web Serial API wrapper. Exports `connect()`, `disconnect()`, `readSettings()`, `writeSettings()`, `readDeviceInfo()`, `isConnected()`. API surface mirrors `ble.js` so `main.js` can switch between them transparently.
+- `web/src/serial.js` — Web Serial API wrapper. Exports `connect()`, `disconnect()`, `readSettings()`, `writeSettings()`, `readDeviceInfo()`, `isConnected()`. API surface mirrors `ble.js` so `main.js` can switch between them transparently. All data-processing functions (`buildFrame`, `verifyFrame`, `findFrameHeader`, `calculateXOR`, `appendRxBuffer`) are pure functions with no side effects. Buffer operations use immutable updates (new `Uint8Array` slices). Only connection resources (`port`, `reader`, `writer`, `connected`) use mutable state.
 - Serial and BLE can operate simultaneously; the firmware pushes sensor data to both channels after each sensor read.
 
 ### Code conventions

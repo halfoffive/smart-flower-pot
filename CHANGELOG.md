@@ -1,5 +1,21 @@
 # 更新日志
 
+## [1.5.1] — 2026-05-10
+
+### 修复
+- **`web/src/serial.js`** — 修复串口连接失败的三个核心问题：
+  - writer 竞态条件：改为持久化 writer（连接时一次性获取，整个生命周期持有），消除 `readDeviceInfo()` 检查 `!writer` 时抛出"未连接到设备"的 bug
+  - cleanup 时序混乱：按严格顺序释放资源（取消 reader → 等待 readLoop 结束 → 释放 writer → 关闭串口），避免 "Cannot cancel a locked stream" 和 "Cannot read properties of null" 错误
+  - disconnect 异步化：`serial.disconnect()` 改为 async 函数，`main.js` 中 `handleDisconnect()` 相应 await
+- **`web/src/main.js`** — `handleDisconnect()` 改为 async，正确 await `serial.disconnect()`
+
+### 变更
+- **`web/src/serial.js`** — 完善中文注释和函数式编程风格：
+  - 所有函数添加 JSDoc 注释（参数、返回值、功能说明）
+  - 帧操作函数重构为纯函数风格（`appendRxBuffer`、`calculateXOR`、`findFrameHeader`、`verifyFrame`、`buildFrame` 均无副作用）
+  - 缓冲区操作使用不可变更新（返回新 `Uint8Array` 而非原地修改）
+  - 新增帧字段偏移常量（`FRAME_HEADER_LEN`、`FRAME_TYPE_OFFSET` 等），消除魔法数字
+
 ## [1.5.0] — 2026-05-10
 
 ### 新增

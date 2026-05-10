@@ -129,11 +129,11 @@ async function handleConnectSerial() {
 // ── 断开处理 ──
 
 /** 主动断开连接并重置 UI */
-function handleDisconnect() {
+async function handleDisconnect() {
   if (connectionMode === 'ble') {
     ble.disconnect()
   } else if (connectionMode === 'serial') {
-    serial.disconnect()
+    await serial.disconnect()
   }
   connected = false
   connectionMode = null

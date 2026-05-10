@@ -9,6 +9,7 @@ web/dist/
 .idea/
 *.swp
 *.swo
+.trae/
 
 # 操作系统
 .DS_Store

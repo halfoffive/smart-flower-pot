@@ -111,6 +111,14 @@ uint16_t currentSoil = 0;   // 土壤湿度 ADC 值
 uint16_t currentTemp = 0;   // 温度（×10）
 uint8_t  currentHum  = 0;   // 空气湿度（%）
 
+/* ===================== 串口帧协议常量 ===================== */
+#define SERIAL_FRAME_HEAD1  0xAA
+#define SERIAL_FRAME_HEAD2  0x55
+#define SERIAL_TYPE_SENSOR  0x01
+#define SERIAL_TYPE_SETTINGS 0x02
+#define SERIAL_TYPE_DEVICE_INFO 0x03
+#define SERIAL_TYPE_READ_SETTINGS 0x04
+
 /* ===================== 函数声明 ===================== */
 // ── 设置管理 ──
 void loadSettings();                        // 从 NVS 加载设置
@@ -131,6 +139,14 @@ void stopPump();                      // 停止水泵
 bool shouldStartWatering();  // 是否满足灌溉启动条件
 bool shouldStopWatering();   // 是否满足灌溉停止条件
 void checkWatering();        // 灌溉状态机
+
+// ── 串口通信 ──
+void handleSerialCommand();              // 处理串口命令
+void sendSerialFrame(uint8_t type, uint8_t *data, uint8_t len);  // 发送串口帧
+void sendSensorDataSerial();             // 通过串口发送传感器数据
+void sendSettingsSerial();               // 通过串口发送设置数据
+void sendDeviceInfoSerial();             // 通过串口发送设备信息
+uint8_t calcXOR(uint8_t *data, uint8_t len);  // 计算 XOR 校验
 
 /* ===================== BLE 回调类实现 ===================== */
 
@@ -330,6 +346,146 @@ void printSensorData() {
   Serial.print("[传感器] ");
   Serial.printf("土壤 ADC=%d / 4095  |  温度=%.1f°C  |  湿度=%d%%\n",
                 currentSoil, currentTemp / 10.0, currentHum);
+}
+
+/* ===================== 串口通信实现 ===================== */
+
+// 计算 XOR 校验
+uint8_t calcXOR(uint8_t *data, uint8_t len) {
+  uint8_t xorVal = 0;
+  for (uint8_t i = 0; i < len; i++) {
+    xorVal ^= data[i];
+  }
+  return xorVal;
+}
+
+// 发送串口帧：帧头 + 类型 + 长度 + 数据 + XOR 校验
+void sendSerialFrame(uint8_t type, uint8_t *data, uint8_t len) {
+  uint8_t frame[64];  // 足够容纳最大帧
+  uint8_t idx = 0;
+  frame[idx++] = SERIAL_FRAME_HEAD1;
+  frame[idx++] = SERIAL_FRAME_HEAD2;
+  frame[idx++] = type;
+  frame[idx++] = len;
+  for (uint8_t i = 0; i < len; i++) {
+    frame[idx++] = data[i];
+  }
+  frame[idx++] = calcXOR(frame, idx);
+  Serial.write(frame, idx);
+}
+
+// 通过串口发送传感器数据（6 字节）
+void sendSensorDataSerial() {
+  uint8_t buffer[6];
+  serializeSensorData(buffer);
+  sendSerialFrame(SERIAL_TYPE_SENSOR, buffer, 6);
+}
+
+// 通过串口发送设置数据（11 字节）
+void sendSettingsSerial() {
+  uint8_t buffer[11];
+  serializeSettings(buffer);
+  sendSerialFrame(SERIAL_TYPE_SETTINGS, buffer, 11);
+}
+
+// 通过串口发送设备信息
+void sendDeviceInfoSerial() {
+  const char *info = "智能花盆 v1.0.0";
+  sendSerialFrame(SERIAL_TYPE_DEVICE_INFO, (uint8_t *)info, strlen(info));
+}
+
+// 处理串口接收到的命令帧
+void handleSerialCommand() {
+  static uint8_t rxBuffer[64];
+  static uint8_t rxIndex = 0;
+
+  while (Serial.available()) {
+    uint8_t b = Serial.read();
+
+    // 查找帧头
+    if (rxIndex == 0 && b != SERIAL_FRAME_HEAD1) continue;
+    if (rxIndex == 1 && b != SERIAL_FRAME_HEAD2) {
+      rxIndex = 0;
+      continue;
+    }
+
+    rxBuffer[rxIndex++] = b;
+
+    // 至少收到 4 字节才能判断长度
+    if (rxIndex >= 4) {
+      uint8_t payloadLen = rxBuffer[3];
+      uint8_t totalLen = 4 + payloadLen + 1;  // 帧头(2) + 类型(1) + 长度(1) + 数据 + 校验(1)
+
+      if (rxIndex >= totalLen) {
+        // 验证 XOR 校验
+        uint8_t xorReceived = rxBuffer[totalLen - 1];
+        uint8_t xorCalculated = calcXOR(rxBuffer, totalLen - 1);
+
+        if (xorReceived == xorCalculated) {
+          uint8_t type = rxBuffer[2];
+          uint8_t *payload = &rxBuffer[4];
+
+          switch (type) {
+            case SERIAL_TYPE_SETTINGS: {
+              // 收到设置写入帧（11 字节）
+              if (payloadLen == 11) {
+                uint8_t newSpeed = payload[9];
+                uint8_t newDir   = payload[10];
+
+                deserializeSettings(payload);
+                saveSettings();
+
+                if (newDir == WATER_DIR_SAVE_ONLY) {
+                  Serial.println("[Serial] ✓ 仅保存设置（不触发水泵）");
+                } else if (newSpeed > 0 && systemState == STATE_IDLE && !shouldStartWatering()) {
+                  manualOverride = true;
+                  Serial.println("[Serial 手动控制] ▶ 启动水泵（手动模式）");
+                  startPump(newDir == 0 ? PUMP_FORWARD : PUMP_REVERSE);
+                } else if (newSpeed == 0 && manualOverride) {
+                  manualOverride = false;
+                  stopPump();
+                  Serial.println("[Serial 手动控制] ■ 停止水泵，退出手动模式");
+                } else if (systemState == STATE_WATERING && pumpState != PUMP_OFF) {
+                  ledcWrite(PUMP_PWM_PIN, pumpSpeed);
+                  Serial.printf("[Serial 自动灌溉] 转速已更新为 %d / 255\n", pumpSpeed);
+                }
+
+                Serial.println("[Serial] 设置已更新并保存到闪存");
+              }
+              break;
+            }
+
+            case SERIAL_TYPE_READ_SETTINGS: {
+              // 收到读取设置请求
+              Serial.println("[Serial] 收到读取设置请求");
+              sendSettingsSerial();
+              break;
+            }
+
+            case SERIAL_TYPE_DEVICE_INFO: {
+              // 收到读取设备信息请求
+              Serial.println("[Serial] 收到读取设备信息请求");
+              sendDeviceInfoSerial();
+              break;
+            }
+
+            default:
+              Serial.printf("[Serial] 未知帧类型: 0x%02X\n", type);
+              break;
+          }
+        } else {
+          Serial.println("[Serial] 帧校验失败，丢弃");
+        }
+
+        rxIndex = 0;  // 重置缓冲区
+      }
+    }
+
+    // 防止缓冲区溢出
+    if (rxIndex >= sizeof(rxBuffer)) {
+      rxIndex = 0;
+    }
+  }
 }
 
 /* ===================== 水泵控制 ===================== */
@@ -554,6 +710,9 @@ void setup() {
 void loop() {
   unsigned long now = millis();
 
+  // ── 处理串口命令（每次循环都检查，确保低延迟响应） ──
+  handleSerialCommand();
+
   // ── 处理 BLE 连接/断开状态变化 ──
   if (deviceConnected && !oldDeviceConnected) {
     oldDeviceConnected = deviceConnected;
@@ -583,7 +742,7 @@ void loop() {
   } else if (systemState == STATE_WATERING) {
     interval = WATERING_INTERVAL_MS;  // 灌溉态：200ms 高频检测
   } else {
-    interval = IDLE_INTERVAL_MS;      // 空闲态：5s 低频检测
+    interval = IDLE_INTERVAL_MS;      // 空闲态：2s 低频检测
   }
 
   if (now - lastReadTime >= interval) {
@@ -603,5 +762,8 @@ void loop() {
       pSensorChar->setValue(sensorBuffer, 6);
       pSensorChar->notify();
     }
+
+    // ── 通过串口推送传感器数据 ──
+    sendSensorDataSerial();
   }
 }

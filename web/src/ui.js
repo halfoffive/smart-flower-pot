@@ -135,7 +135,7 @@ export function render(container, state) {
  * 顶部栏 — 标题、连接状态指示、主题切换按钮
  * 包含入场动画（首个卡片，delay: 0ms）
  */
-function buildHeader({ connected }) {
+function buildHeader({ connected, connectionMode }) {
   const header = el('div', 'flex items-center justify-between sfp-card rounded-2xl p-4 shadow-lg animate-card-in')
   header.style.animationDelay = '0ms'
 
@@ -143,6 +143,9 @@ function buildHeader({ connected }) {
     ? 'bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.4)]'
     : 'bg-[rgb(var(--sfp-dot-inactive))]'
   const dotAnim = connected ? 'animate-pulse-dot' : ''
+
+  const modeLabel = connectionMode === 'ble' ? '蓝牙' : connectionMode === 'serial' ? '串口' : ''
+  const statusText = connected ? (modeLabel ? `已连接 · ${modeLabel}` : '已连接') : '未连接'
 
   // 获取当前主题图标
   const currentTheme = getTheme()
@@ -155,7 +158,7 @@ function buildHeader({ connected }) {
         <h1 class="text-lg font-bold bg-gradient-to-r from-emerald-300 to-emerald-500 bg-clip-text text-transparent">智能花盆</h1>
         <div class="flex items-center gap-1.5 mt-0.5">
           <span class="w-2 h-2 rounded-full ${dotColor} ${dotAnim}"></span>
-          <span class="text-xs text-[rgb(var(--sfp-text-secondary))]">${connected ? '已连接' : '未连接'}</span>
+          <span class="text-xs text-[rgb(var(--sfp-text-secondary))]">${statusText}</span>
         </div>
       </div>
     </div>
@@ -187,7 +190,7 @@ function buildBody(state) {
 }
 
 /**
- * 未连接空状态页（含连接 CTA 按钮）
+ * 未连接空状态页（含连接方式选择按钮）
  * 入场动画 delay: 100ms（紧随头部之后）
  */
 function buildEmpty(connected) {
@@ -203,8 +206,17 @@ function buildEmpty(connected) {
     : `
       <span class="text-5xl mb-4">🪴</span>
       <h3 class="text-lg font-semibold text-[rgb(var(--sfp-text-primary))] mb-1">欢迎使用智能花盆</h3>
-      <p class="text-sm text-[rgb(var(--sfp-text-muted))] mb-5">点击下方按钮连接您的智能花盆设备</p>
-      <button data-action="connect" class="px-6 py-2.5 sfp-btn-primary rounded-xl font-medium text-sm transition-all duration-200 active:scale-95">连接设备</button>
+      <p class="text-sm text-[rgb(var(--sfp-text-muted))] mb-5">选择连接方式以开始监控您的智能花盆</p>
+      <div class="flex flex-col sm:flex-row gap-3 w-full max-w-xs">
+        <button data-action="connect-ble" class="flex-1 px-4 py-2.5 sfp-btn-primary rounded-xl font-medium text-sm transition-all duration-200 active:scale-95">
+          🔵 蓝牙连接
+        </button>
+        <button data-action="connect-serial" class="flex-1 px-4 py-2.5 sfp-btn-primary rounded-xl font-medium text-sm transition-all duration-200 active:scale-95"
+                style="background: linear-gradient(to right, rgb(var(--sfp-info)), rgb(96 165 250));">
+          🔌 串口连接
+        </button>
+      </div>
+      <p class="text-xs text-[rgb(var(--sfp-text-muted))] mt-4">蓝牙无需数据线 · 串口更稳定快速</p>
     `
 
   return card
@@ -394,9 +406,12 @@ function rowInputCol(label, key, value) {
  * @param {object} state - 应用状态（含回调函数引用）
  */
 function bindEvents(container, state) {
-  // ── 连接/断开按钮 ──
-  container.querySelectorAll('[data-action="connect"]').forEach(btn => {
-    btn.onclick = state.onConnect
+  // ── 连接按钮 ──
+  container.querySelectorAll('[data-action="connect-ble"]').forEach(btn => {
+    btn.onclick = state.onConnectBle
+  })
+  container.querySelectorAll('[data-action="connect-serial"]').forEach(btn => {
+    btn.onclick = state.onConnectSerial
   })
   container.querySelectorAll('[data-action="disconnect"]').forEach(btn => {
     btn.onclick = state.onDisconnect

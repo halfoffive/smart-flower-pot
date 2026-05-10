@@ -1,5 +1,41 @@
 # 更新日志
 
+## [1.5.0] — 2026-05-10
+
+### 新增
+- **Web Serial 串口连接模式**：在原有 BLE 基础上增加 USB 串口连接方式，通过 Web Serial API 与 ESP32-C6 通信
+  - 前端新增 `web/src/serial.js` — Web Serial API 封装，API 与 `ble.js` 完全对齐（`connect`/`disconnect`/`readSettings`/`writeSettings`/`readDeviceInfo`/`isConnected`）
+  - 串口二进制帧协议：帧头 `0xAA 0x55` + 类型 + 长度 + 载荷 + XOR 校验，支持传感器数据、设置读写、设备信息查询
+  - 波特率 115200，支持 CP210x / CH340 等常见 USB 转串口芯片
+- **双连接方式 UI**：空状态页新增「🔵 蓝牙连接」和「🔌 串口连接」两个按钮，头部状态栏显示当前连接模式（已连接 · 蓝牙 / 串口）
+- **双模数据推送**：ESP32 固件每次传感器读取后同时向 BLE 和串口推送数据，两种连接互不干扰
+
+### 变更
+- **`web/src/main.js`**：引入 `serial.js`，增加 `connectionMode` 状态（`'ble' | 'serial' | null`），连接/断开/保存设置逻辑根据当前模式自动路由到对应模块
+- **`web/src/ui.js`**：
+  - `buildHeader` 增加 `connectionMode` 参数，状态文本显示「已连接 · 蓝牙」或「已连接 · 串口」
+  - `buildEmpty` 重写为双按钮布局，蓝牙按钮使用 emerald 渐变，串口按钮使用 blue 渐变
+  - `bindEvents` 绑定 `connect-ble` 和 `connect-serial` 两个按钮事件
+- **`esp32-c6/smart_flower_pot.ino`**：
+  - 新增串口帧协议常量（`SERIAL_FRAME_HEAD1/HEAD2`、`SERIAL_TYPE_*`）
+  - 新增 `handleSerialCommand()` — 串口命令解析（设置写入、读取设置请求、设备信息请求）
+  - 新增 `sendSerialFrame()` / `sendSensorDataSerial()` / `sendSettingsSerial()` / `sendDeviceInfoSerial()` — 串口数据发送
+  - 新增 `calcXOR()` — 帧校验计算
+  - `loop()` 中每次循环调用 `handleSerialCommand()`，传感器读取后调用 `sendSensorDataSerial()`
+
+### 文档
+- `README.md` — 更新功能特性、目录结构、快速开始（增加串口连接步骤）、技术栈、新增「串口通信协议」章节
+- `AGENTS.md` — 更新模块依赖图（增加 `serial.js`）、新增 Serial protocol 说明、更新 Gotchas
+
+### 修改文件
+- `web/src/serial.js` — **新增**
+- `web/src/main.js` — 引入 serial.js，增加连接模式切换逻辑
+- `web/src/ui.js` — 双连接按钮 UI、头部显示连接模式
+- `esp32-c6/smart_flower_pot/smart_flower_pot.ino` — 串口帧协议解析与发送
+- `README.md` — 增加 Web Serial 使用说明和协议文档
+- `AGENTS.md` — 更新架构说明
+- `CHANGELOG.md` — 本文档
+
 ## [1.4.0] — 2026-05-05
 
 ### 删除

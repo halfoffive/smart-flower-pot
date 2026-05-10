@@ -26,7 +26,7 @@ No test, lint, or typecheck scripts exist.
 
 The build produces one HTML entrypoint via `vite.config.js` (`rollupOptions.input`). Do **not** add new pages without registering them there.
 
-- `index.html` → `src/main.js` → `src/ui.js`, `src/ble.js`, `src/settings.js`, `src/history.js`, `src/toast.js`, `src/theme.js`, `src/sw-register.js`
+- `index.html` → `src/main.js` → `src/ui.js`, `src/ble.js`, `src/serial.js`, `src/settings.js`, `src/history.js`, `src/toast.js`, `src/theme.js`, `src/sw-register.js`
 
 Tailwind CSS 4 uses the `@tailwindcss/vite` plugin — the entry is `@import "tailwindcss"` plus a `@theme` block for custom keyframe animations (`animate-pulse-dot`, `animate-slide-up`, `animate-fade-in`, `animate-card-in`) in `src/style.css`. Do not install PostCSS or autoprefixer separately.
 
@@ -60,6 +60,13 @@ Binary, Little-Endian, fixed-length buffers. Settings = 11 bytes, sensor data = 
 
 **Save-only flag**: Byte [10] (`waterDirection`) = `0xFF` tells firmware to save settings without triggering pump. This prevents unintended auto-watering when user just saves config.
 
+### Serial protocol
+
+Binary framed protocol over USB Serial (115200 baud). Frame format: `0xAA 0x55` header + type byte + length byte + payload + XOR checksum. Types: `0x01` sensor data, `0x02` settings, `0x03` device info, `0x04` read-settings request. The firmware parses frames in `loop()` via `handleSerialCommand()` and sends sensor data after each read. Settings/sensor payloads use the exact same 11/6 byte layouts as BLE.
+
+- `web/src/serial.js` — Web Serial API wrapper. Exports `connect()`, `disconnect()`, `readSettings()`, `writeSettings()`, `readDeviceInfo()`, `isConnected()`. API surface mirrors `ble.js` so `main.js` can switch between them transparently.
+- Serial and BLE can operate simultaneously; the firmware pushes sensor data to both channels after each sensor read.
+
 ### Code conventions
 
 - All comments are in Chinese.
@@ -71,7 +78,8 @@ Binary, Little-Endian, fixed-length buffers. Settings = 11 bytes, sensor data = 
 
 ## Gotchas
 
-- **Web Bluetooth only works in Chromium browsers** (Chrome, Edge). Firefox/Safari will silently fail.
+- **Web Bluetooth and Web Serial only work in Chromium browsers** (Chrome, Edge). Firefox/Safari will silently fail.
+- When using Serial mode, close Arduino IDE's Serial Monitor first to avoid port conflicts.
 - The firmware's `MAX_WATERING_MS` is **5000 (5 seconds)**, not 60 seconds. The README has a stale mention of 60s in one section — trust the code.
 - `vite.config.js` uses CommonJS `path` module via `import` — Vite handles this, but do not convert to `import.meta.url` without verifying the multi-page build still resolves paths correctly.
 - There is no CI, no pre-commit hooks, and no automated testing of any kind.

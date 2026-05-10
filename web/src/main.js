@@ -10,7 +10,8 @@
  */
 
 import './sw-register.js'
-import { connect, disconnect, readSettings, writeSettings, isConnected } from './ble.js'
+import * as ble from './ble.js'
+import * as serial from './serial.js'
 import { serializeSettings, deserializeSettings, deserializeSensor, DEFAULT_SETTINGS, WATER_DIR_SAVE_ONLY } from './settings.js'
 import { render, updateDashboard } from './ui.js'
 import { showToast, showAlert } from './toast.js'
@@ -19,7 +20,8 @@ import { initTheme } from './theme.js'
 // ── 应用状态（不可变风格 — 通过展开运算符创建新对象） ──
 let currentSettings = { ...DEFAULT_SETTINGS }  // 当前设置（本地副本）
 let currentSensor   = null                      // 最新传感器数据
-let connected       = false                     // BLE 连接状态
+let connected       = false                     // 连接状态
+let connectionMode  = null                      // 'ble' | 'serial' | null
 
 const app = document.getElementById('app')      // 挂载容器
 
@@ -35,68 +37,106 @@ const fullRender = () => {
     settings: currentSettings,
     sensor: currentSensor,
     connected,
-    onConnect:        handleConnect,
+    connectionMode,
+    onConnectBle:     handleConnectBle,
+    onConnectSerial:  handleConnectSerial,
     onDisconnect:     handleDisconnect,
     onSaveSettings:   handleSaveSettings,
     onSettingChange:  handleSettingChange,
   })
 }
 
-// ── 连接处理 ──
+// ── 传感器数据回调（两种连接模式共用） ──
+
+function onSensorData(buffer) {
+  const data = deserializeSensor(buffer)
+  const wasNull = currentSensor === null
+  currentSensor = data
+  // 首次收到传感器数据：从等待状态切换到仪表盘（全量渲染）
+  // 注意：仅当 connected 为 true 时才执行（避免在 connect 未完成时提前渲染）
+  if (wasNull && connected) {
+    fullRender()
+  } else {
+    updateDashboard(data)  // 内部已通过 RAF 节流
+  }
+}
+
+function onDisconnect() {
+  connected = false
+  connectionMode = null
+  currentSensor = null
+  fullRender()
+}
+
+// ── BLE 连接处理 ──
 
 /**
  * 发起 BLE 连接
  * 传感器数据通过 RAF 节流更新仪表盘
  */
-async function handleConnect() {
+async function handleConnectBle() {
   try {
-    await connect(
-      // 传感器数据回调 → RAF 节流局部更新
-      (buffer) => {
-        const data = deserializeSensor(buffer)
-        const wasNull = currentSensor === null
-        currentSensor = data
-        // 首次收到传感器数据：从等待状态切换到仪表盘（全量渲染）
-        // 注意：仅当 connected 为 true 时才执行（避免在 connect 未完成时提前渲染）
-        if (wasNull && connected) {
-          fullRender()
-        } else {
-          updateDashboard(data)  // 内部已通过 RAF 节流
-        }
-      },
-      // 断开回调 → 需要全量渲染
-      () => {
-        connected = false
-        currentSensor = null
-        fullRender()
-      }
-    )
+    await ble.connect(onSensorData, onDisconnect)
 
     connected = true
+    connectionMode = 'ble'
 
     // 连接成功后同步设备设置
-    const settingsBuf = await readSettings()
+    const settingsBuf = await ble.readSettings()
     currentSettings = deserializeSettings(settingsBuf)
 
     fullRender()
   } catch (error) {
-    console.error('连接失败:', error)
+    console.error('BLE 连接失败:', error)
     showAlert(
       '1. ESP32-C6 已上电且运行\n' +
       '2. 电脑蓝牙已开启\n' +
       '3. 设备未被其他页面占用\n' +
       '4. 浏览器支持 Web Bluetooth (Chrome/Edge)',
-      '连接失败'
+      '蓝牙连接失败'
+    )
+  }
+}
+
+// ── Serial 连接处理 ──
+
+/**
+ * 发起 Web Serial 连接
+ */
+async function handleConnectSerial() {
+  try {
+    await serial.connect(onSensorData, onDisconnect)
+
+    connected = true
+    connectionMode = 'serial'
+
+    // 连接成功后同步设备设置
+    const settingsBuf = await serial.readSettings()
+    currentSettings = deserializeSettings(settingsBuf)
+
+    fullRender()
+  } catch (error) {
+    console.error('Serial 连接失败:', error)
+    showAlert(
+      '1. ESP32-C6 已通过 USB 连接到电脑\n' +
+      '2. 未占用串口的其他程序（如 Arduino IDE 串口监视器）\n' +
+      '3. 浏览器支持 Web Serial (Chrome/Edge)',
+      '串口连接失败'
     )
   }
 }
 
 // ── 断开处理 ──
 
-/** 主动断开 BLE 连接并重置 UI */
+/** 主动断开连接并重置 UI */
 function handleDisconnect() {
-  disconnect()
+  if (connectionMode === 'ble') {
+    ble.disconnect()
+  } else if (connectionMode === 'serial') {
+    serial.disconnect()
+  }
   connected = false
+  connectionMode = null
   currentSensor = null
   fullRender()
 }
@@ -108,7 +148,8 @@ function handleDisconnect() {
  * 使用 WATER_DIR_SAVE_ONLY (0xFF) 标志告知固件"仅保存设置，不触发水泵"
  */
 async function handleSaveSettings() {
-  if (!isConnected()) {
+  const conn = connectionMode === 'ble' ? ble : serial
+  if (!conn.isConnected()) {
     showAlert('请先连接设备', '提示')
     return
   }
@@ -116,7 +157,7 @@ async function handleSaveSettings() {
     // 使用保存设置专用标志（0xFF），固件不会自动启动水泵
     const settingsToSave = { ...currentSettings, waterDirection: WATER_DIR_SAVE_ONLY }
     const buf = serializeSettings(settingsToSave)
-    await writeSettings(buf)
+    await conn.writeSettings(buf)
     showToast('✅ 设置已保存到设备')
   } catch (error) {
     console.error('保存设置失败:', error)

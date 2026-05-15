@@ -59,10 +59,10 @@ Tailwind CSS 4 uses the `@tailwindcss/vite` plugin — the entry is `@import "ta
 
 ### URL auto-connect
 
-- URL query string format: `?mode=ble&mac=XX:XX:XX:XX:XX:XX` or `?mode=serial`
+- URL query string format: `?mode=ble&mac=XX:XX:XX:XX:XX:XX` or `?mode=serial&vid=0x10c4&pid=0xea60`
 - On page load, `useConnection.autoConnectFromUrl()` checks URL params and attempts to connect
-- For BLE: uses `navigator.bluetooth.getDevices()` to find previously paired devices, then `ble.connectWithDevice()` to connect without user gesture
-- For Serial: uses `navigator.serial.getPorts()` to find previously granted ports, then `serial.connectWithPort()` to connect without user gesture
+- For BLE: uses `navigator.bluetooth.getDevices()` to find previously paired devices. If URL contains `mac`, devices are sorted to prioritize matching MAC address (`device.id === mac`). Then `ble.connectWithDevice()` connects without user gesture
+- For Serial: uses `navigator.serial.getPorts()` to find previously granted ports. If URL contains `vid`/`pid`, ports are matched by USB vendor/product ID via `matchSerialPort()`. Then `serial.connectWithPort()` connects without user gesture
 - After successful connection, URL is updated via `history.replaceState`
 - Auto-connect includes availability checks (`navigator.bluetooth`, `navigator.serial`, `getDevices()`) and detailed console.warn logging for troubleshooting
 
@@ -95,7 +95,7 @@ Binary, Little-Endian, fixed-length buffers. Settings = 11 bytes, sensor data = 
 
 Binary framed protocol over USB Serial (115200 baud). Frame format: `0xAA 0x55` header + type byte + length byte + payload + XOR checksum. Types: `0x01` sensor data, `0x02` settings, `0x03` device info, `0x04` read-settings request. The firmware parses frames in `loop()` via `handleSerialCommand()` and sends sensor data after each read. Settings/sensor payloads use the exact same 11/6 byte layouts as BLE.
 
-- `web/src/lib/serial.js` — Web Serial API wrapper. Exports `connect()`, `connectWithPort()`, `disconnect()`, `readSettings()`, `writeSettings()`, `readDeviceInfo()`, `isConnected()`. API surface mirrors `ble.js` so `useConnection.js` can switch between them transparently. `connect()` requires user gesture (calls `requestPort()`); `connectWithPort()` accepts an already-granted port for URL auto-connect. Both share `openAndStartReadLoop()` internal function. All data-processing functions are pure functions with no side effects. Buffer operations use immutable updates.
+- `web/src/lib/serial.js` — Web Serial API wrapper. Exports `connect()`, `connectWithPort()`, `disconnect()`, `readSettings()`, `writeSettings()`, `readDeviceInfo()`, `isConnected()`, `getPortInfo()`. API surface mirrors `ble.js` so `useConnection.js` can switch between them transparently. `connect()` requires user gesture (calls `requestPort()`); `connectWithPort()` accepts an already-granted port for URL auto-connect. Both share `openAndStartReadLoop()` internal function. `getPortInfo()` returns `SerialPortInfo` (USB VID/PID) for URL query and DeviceInfo display. All data-processing functions are pure functions with no side effects. Buffer operations use immutable updates.
 - Serial and BLE can operate simultaneously; the firmware pushes sensor data to both channels after each sensor read.
 
 ### Code conventions

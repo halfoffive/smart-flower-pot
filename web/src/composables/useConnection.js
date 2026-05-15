@@ -4,11 +4,13 @@
  * 统一管理 BLE / Serial 双模连接、传感器数据流、设置读写、设备信息
  * 通过 provide/inject 在组件树中共享
  *
- * 修复：
+ * 功能：
  * - 连接与数据读取分离：连接失败才弹错误，读取失败仅 warn 不阻断
  * - saveSettings 发送实际方向值，不再替换为 0xFF（方向保存与水泵触发解耦）
  * - 串口自动连接使用 connectWithPort() 直连已授权端口（无需用户手势）
- * - BLE 自动连接增加可用性前置检查
+ * - BLE 自动连接按 MAC 地址优先匹配
+ * - 串口 URL 包含 USB VID/PID 标识
+ * - connecting/saving 状态供 UI 显示进度
  */
 
 import { ref, readonly } from 'vue'
@@ -35,6 +37,10 @@ const settings = ref({ ...DEFAULT_SETTINGS })
 /** 设备信息 */
 const deviceInfo = ref(null)
 
+/** 进度状态 */
+const connecting = ref(false)
+const saving = ref(false)
+
 /**
  * 连接管理组合式函数
  * @param {function} showAlert - 显示错误对话框
@@ -54,6 +60,7 @@ export function useConnection(showAlert, showToast) {
     connectionMode.value = null
     sensor.value = null
     deviceInfo.value = null
+    connecting.value = false
   }
 
   /**
@@ -78,6 +85,7 @@ export function useConnection(showAlert, showToast) {
 
   /** BLE 连接 */
   async function connectBle() {
+    connecting.value = true
     try {
       await ble.connect(onSensorData, onDisconnect)
 
@@ -95,11 +103,14 @@ export function useConnection(showAlert, showToast) {
         '4. 浏览器支持 Web Bluetooth (Chrome/Edge)',
         '蓝牙连接失败'
       )
+    } finally {
+      connecting.value = false
     }
   }
 
   /** 串口连接 */
   async function connectSerial() {
+    connecting.value = true
     try {
       await serial.connect(onSensorData, onDisconnect)
 
@@ -116,6 +127,8 @@ export function useConnection(showAlert, showToast) {
         '3. 浏览器支持 Web Serial (Chrome/Edge)',
         '串口连接失败'
       )
+    } finally {
+      connecting.value = false
     }
   }
 
@@ -130,6 +143,7 @@ export function useConnection(showAlert, showToast) {
     connectionMode.value = null
     sensor.value = null
     deviceInfo.value = null
+    connecting.value = false
     clearUrlQuery()
   }
 
@@ -144,6 +158,7 @@ export function useConnection(showAlert, showToast) {
       showAlert('请先连接设备', '提示')
       return
     }
+    saving.value = true
     try {
       const buf = serializeSettings(settings.value)
       await conn.writeSettings(buf)
@@ -151,6 +166,8 @@ export function useConnection(showAlert, showToast) {
     } catch (error) {
       console.error('保存设置失败:', error)
       showAlert('保存失败: ' + error.message, '错误')
+    } finally {
+      saving.value = false
     }
   }
 
@@ -166,6 +183,15 @@ export function useConnection(showAlert, showToast) {
     if (connectionMode.value === 'ble' && deviceInfo.value?.mac) {
       params.set('mac', deviceInfo.value.mac)
     }
+    if (connectionMode.value === 'serial') {
+      const info = serial.getPortInfo()
+      if (info?.usbVendorId) {
+        params.set('vid', `0x${info.usbVendorId.toString(16)}`)
+      }
+      if (info?.usbProductId) {
+        params.set('pid', `0x${info.usbProductId.toString(16)}`)
+      }
+    }
     const newUrl = `${window.location.pathname}?${params.toString()}`
     window.history.replaceState(null, '', newUrl)
   }
@@ -173,6 +199,27 @@ export function useConnection(showAlert, showToast) {
   /** 清除 URL 查询字符串 */
   function clearUrlQuery() {
     window.history.replaceState(null, '', window.location.pathname)
+  }
+
+  /**
+   * 根据 URL 中的 vid/pid 匹配已授权串口
+   * @param {SerialPort[]} ports - 已授权端口列表
+   * @param {string} vid - USB 厂商 ID（十六进制字符串，如 "0x10c4"）
+   * @param {string} pid - USB 产品 ID（十六进制字符串，如 "0xea60"）
+   * @returns {SerialPort|null}
+   */
+  function matchSerialPort(ports, vid, pid) {
+    if (!vid && !pid) return ports[0] || null
+
+    const vidNum = vid ? parseInt(vid, 16) : null
+    const pidNum = pid ? parseInt(pid, 16) : null
+
+    return ports.find((p) => {
+      const info = p.getInfo()
+      if (vidNum != null && info.usbVendorId !== vidNum) return false
+      if (pidNum != null && info.usbProductId !== pidNum) return false
+      return true
+    }) || ports[0] || null
   }
 
   /** 从 URL 查询字符串自动连接 */
@@ -191,8 +238,18 @@ export function useConnection(showAlert, showToast) {
           return
         }
 
-        // 使用 connectWithPort 直连已授权端口，跳过 requestPort（无需用户手势）
-        await serial.connectWithPort(ports[0], onSensorData, onDisconnect)
+        const targetPort = matchSerialPort(
+          ports,
+          params.get('vid'),
+          params.get('pid')
+        )
+        if (!targetPort) {
+          console.warn('[自动连接] 未找到匹配的串口设备')
+          return
+        }
+
+        connecting.value = true
+        await serial.connectWithPort(targetPort, onSensorData, onDisconnect)
 
         connected.value = true
         connectionMode.value = 'serial'
@@ -202,6 +259,8 @@ export function useConnection(showAlert, showToast) {
         console.log('[自动连接] 串口自动连接成功')
       } catch (e) {
         console.warn('[自动连接] 串口自动连接失败:', e)
+      } finally {
+        connecting.value = false
       }
     } else if (mode === 'ble') {
       try {
@@ -220,9 +279,20 @@ export function useConnection(showAlert, showToast) {
           return
         }
 
-        for (const d of devices) {
+        const targetMac = params.get('mac')
+
+        // 按 MAC 优先排序：匹配的设备排在前面
+        const sorted = targetMac
+          ? [...devices].sort((a, b) => {
+              if (a.id === targetMac) return -1
+              if (b.id === targetMac) return 1
+              return 0
+            })
+          : devices
+
+        connecting.value = true
+        for (const d of sorted) {
           try {
-            // 使用 connectWithDevice 直连，跳过 requestDevice（无需用户手势）
             await ble.connectWithDevice(d, onSensorData, onDisconnect)
 
             connected.value = true
@@ -230,7 +300,7 @@ export function useConnection(showAlert, showToast) {
             updateUrlQuery()
 
             await readDeviceData(ble)
-            console.log('[自动连接] BLE 自动连接成功')
+            console.log('[自动连接] BLE 自动连接成功', d.id)
             return
           } catch (_) {
             // 此设备不可用，尝试下一个
@@ -240,6 +310,8 @@ export function useConnection(showAlert, showToast) {
         console.warn('[自动连接] 所有已配对设备均无法连接')
       } catch (e) {
         console.warn('[自动连接] BLE 自动连接失败:', e)
+      } finally {
+        connecting.value = false
       }
     }
   }
@@ -250,6 +322,8 @@ export function useConnection(showAlert, showToast) {
     sensor: readonly(sensor),
     settings: readonly(settings),
     deviceInfo: readonly(deviceInfo),
+    connecting: readonly(connecting),
+    saving: readonly(saving),
 
     connectBle,
     connectSerial,

@@ -177,6 +177,15 @@ export function isConnected() {
   return connected && port?.readable != null
 }
 
+/**
+ * 获取当前串口设备信息（USB VID/PID）
+ * Web Serial API 不暴露 COM 端口号，仅提供 USB 标识
+ * @returns {SerialPortInfo|null}
+ */
+export function getPortInfo() {
+  return port?.getInfo() ?? null
+}
+
 async function readLoop() {
   if (!port || !port.readable) return
 

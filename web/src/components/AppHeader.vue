@@ -17,7 +17,7 @@ const modeLabel = () => {
 <template>
   <div class="flex items-center justify-between sfp-card rounded-2xl p-4 shadow-lg animate-card-in" style="animation-delay: 0ms">
     <div class="flex items-center gap-3">
-      <span class="text-2xl">🌱</span>
+      <img src="/potted_plant_3d.png" alt="智能花盆" class="w-8 h-8" />
       <div>
         <h1 class="text-lg font-bold bg-gradient-to-r from-emerald-300 to-emerald-500 bg-clip-text text-transparent">
           智能花盆

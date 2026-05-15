@@ -39,9 +39,9 @@ onMounted(() => {
 
     <template v-if="connection.connected.value">
       <Dashboard />
-      <DeviceInfo />
       <SettingsPanel />
       <DisconnectAction />
+      <DeviceInfo />
     </template>
 
     <template v-else-if="!connection.connected.value">

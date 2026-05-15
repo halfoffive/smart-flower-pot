@@ -1,5 +1,35 @@
 # 更新日志
 
+## [2.1.0] — 2026-05-15
+
+### 新增
+- **BLE 自动连接按 MAC 匹配**：URL 中包含 `mac` 参数时，优先连接 MAC 地址匹配的蓝牙设备
+- **串口 URL 包含 USB 标识**：串口连接后 URL 包含 `vid`（USB 厂商 ID）和 `pid`（USB 产品 ID），刷新页面自动连接匹配的端口
+- **进度条与加载状态**：连接中显示 spinner + 进度条动画，等待传感器数据显示 indeterminate 进度条，保存设置时按钮显示 spinner + 文字变更
+- **设备信息面板增强**：串口模式显示 USB VID/PID 标识，动态构建信息列表（仅显示有值的字段）
+
+### 变更
+- 所有主要图标（标题、欢迎页、等待状态、设备信息、设置面板）替换为 `potted_plant_3d.png`
+- favicon 和 PWA 图标替换为 `potted_plant_3d.png`
+- 设备信息面板移至页面最底部
+- `useConnection.js` 新增 `connecting`/`saving` 响应式状态
+- `serial.js` 新增 `getPortInfo()` 导出函数
+- `DeviceInfo.vue` 直接导入 `serial.js` 获取 USB 标识信息
+
+### 修改文件
+- `web/public/potted_plant_3d.png` — 新增图标文件
+- `web/public/manifest.json` — PWA 图标改为 PNG
+- `web/index.html` — favicon 改为 PNG
+- `web/src/style.css` — 新增 `.sfp-progress` 进度条和 `.sfp-spinner` 旋转器样式
+- `web/src/composables/useConnection.js` — 新增 connecting/saving 状态、串口 USB 标识、BLE MAC 匹配
+- `web/src/lib/serial.js` — 新增 getPortInfo() 导出
+- `web/src/components/AppHeader.vue` — 图标替换
+- `web/src/components/ConnectPanel.vue` — 图标替换 + 连接中加载状态
+- `web/src/components/Dashboard.vue` — 图标替换 + 等待数据进度条
+- `web/src/components/DeviceInfo.vue` — 图标替换 + USB VID/PID 显示 + 动态信息列表
+- `web/src/components/SettingsPanel.vue` — 图标替换 + 保存中加载状态
+- `web/src/App.vue` — DeviceInfo 移至底部
+
 ## [2.0.1] — 2026-05-15
 
 ### 修复

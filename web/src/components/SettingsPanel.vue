@@ -4,7 +4,7 @@
  */
 import { inject } from 'vue'
 
-const { settings, updateSetting, saveSettings } = inject('connection')
+const { settings, updateSetting, saveSettings, saving } = inject('connection')
 
 /** 格式化显示值：整数直接显示，浮点保留一位小数 */
 function displayValue(key, value) {
@@ -35,7 +35,7 @@ function onSelect(key, value) {
 <template>
   <div class="sfp-card rounded-2xl p-5 space-y-5 shadow-lg animate-card-in" style="animation-delay: 400ms">
     <div class="flex items-center gap-2">
-      <span class="text-lg">⚙️</span>
+      <img src="/potted_plant_3d.png" alt="灌溉设置" class="w-6 h-6" />
       <h2 class="text-base font-bold text-[rgb(var(--sfp-text-primary))]">灌溉设置</h2>
     </div>
 
@@ -145,10 +145,12 @@ function onSelect(key, value) {
 
     <!-- 保存按钮 -->
     <button
-      class="w-full py-3 sfp-btn-primary rounded-xl font-bold text-base transition-all duration-200 active:scale-[0.98]"
+      class="w-full py-3 sfp-btn-primary rounded-xl font-bold text-base transition-all duration-200 active:scale-[0.98] flex items-center justify-center gap-2"
+      :disabled="saving"
       @click="saveSettings"
     >
-      保存设置到设备
+      <span v-if="saving" class="sfp-spinner"></span>
+      {{ saving ? '保存中...' : '保存设置到设备' }}
     </button>
   </div>
 </template>

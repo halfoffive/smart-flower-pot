@@ -53,8 +53,9 @@ const pumpText = computed(() => sensor.value ? pumpLabel(sensor.value.pump) : '�
     />
   </div>
   <div v-else class="flex flex-col items-center justify-center sfp-card rounded-2xl p-8 text-center shadow-lg animate-card-in" style="animation-delay: 100ms">
-    <span class="text-5xl mb-4">📡</span>
+    <img src="/potted_plant_3d.png" alt="等待数据" class="w-16 h-16 mb-4" />
     <h3 class="text-lg font-semibold text-[rgb(var(--sfp-text-primary))] mb-2">等待传感器数据...</h3>
     <p class="text-sm text-[rgb(var(--sfp-text-muted))]">设备已连接，正在获取传感器读数</p>
+    <div class="sfp-progress" style="max-width: 200px;"></div>
   </div>
 </template>

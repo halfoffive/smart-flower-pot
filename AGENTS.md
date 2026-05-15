@@ -59,11 +59,11 @@ Tailwind CSS 4 uses the `@tailwindcss/vite` plugin — the entry is `@import "ta
 
 ### URL auto-connect
 
-- URL query string format: `?mode=ble&mac=XX:XX:XX:XX:XX:XX` or `?mode=serial&vid=0x10c4&pid=0xea60`
+- URL query string format: `?mode=ble&mac=XX:XX:XX:XX:XX:XX` or `?mode=ble&mac=XX:XX:XX:XX:XX:XX&pick=1` or `?mode=serial&vid=0x10c4&pid=0xea60`
 - On page load, `useConnection.autoConnectFromUrl()` checks URL params and attempts to connect
-- For BLE: uses `navigator.bluetooth.getDevices()` to find previously paired devices and tries each one. If the API is unavailable, no devices are paired, or all devices fail to connect, it falls back to `connectBle()` which triggers the browser's manual device picker (requires user gesture). The `mac` parameter in the URL is for identification/bookmarking only — it does not participate in device matching since `BluetoothDevice.id` is a browser-internal identifier that differs from the real BLE MAC address reported by the firmware
+- For BLE: uses `navigator.bluetooth.getDevices()` to find previously paired devices and tries each one. If the API is unavailable, no devices are paired, or all devices fail to connect, it falls back to `connectBle()` which triggers the browser's manual device picker (requires user gesture). The `mac` parameter in the URL is for identification/bookmarking only — it does not participate in device matching since `BluetoothDevice.id` is a browser-internal identifier that differs from the real BLE MAC address reported by the firmware. The `pick=1` parameter skips auto-connect and directly opens the browser's Bluetooth device picker
 - For Serial: uses `navigator.serial.getPorts()` to find previously granted ports. If URL contains `vid`/`pid`, ports are matched by USB vendor/product ID via `matchSerialPort()`. Then `serial.connectWithPort()` connects without user gesture
-- After successful connection, URL is updated via `history.replaceState`
+- After successful connection, URL is updated via `history.replaceState` (MAC/VID/PID are written after `readDeviceData()` completes so the values are available)
 - Auto-connect includes availability checks and detailed console.warn logging for troubleshooting
 
 ### PWA

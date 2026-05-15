@@ -4,12 +4,14 @@
 
 ### 新增
 - **BLE 自动连接回退手动连接**：URL 中包含 `mode=ble` 但浏览器不支持 `getDevices()` API、无已配对设备、或所有已配对设备连接失败时，自动弹出手动蓝牙连接框，不再静默失败
+- **URL 参数 `pick=1`**：`?mode=ble&pick=1` 直接弹出蓝牙设备选择框，跳过自动连接流程
 
 ### 修复
 - **BLE 自动连接 MAC 匹配失效**：移除无效的 `device.id === mac` 排序逻辑（`BluetoothDevice.id` 是浏览器内部标识符，不等于固件上报的真实 MAC 地址），改为直接遍历所有已配对设备尝试连接
+- **MAC 地址未写入 URL**：`updateUrlQuery()` 在 `readDeviceData()` 之前调用导致 `deviceInfo.mac` 为 null，MAC 地址从未写入 URL。修复：将 `updateUrlQuery()` 移到 `readDeviceData()` 之后（BLE/Serial/自动连接均修复）
 
 ### 修改文件
-- `web/src/composables/useConnection.js` — BLE 自动连接回退逻辑 + 移除无效 MAC 排序 + 完善中文注释
+- `web/src/composables/useConnection.js` — BLE 自动连接回退逻辑 + 移除无效 MAC 排序 + pick 参数 + 修复 URL 写入时序 + 完善中文注释
 - `README.md` — 更新 URL 自动连接描述
 - `AGENTS.md` — 更新 URL auto-connect 章节
 - `CHANGELOG.md` — 本文档

@@ -91,9 +91,9 @@ export function useConnection(showAlert, showToast) {
 
       connected.value = true
       connectionMode.value = 'ble'
-      updateUrlQuery()
 
       await readDeviceData(ble)
+      updateUrlQuery()
     } catch (error) {
       console.error('BLE 连接失败:', error)
       showAlert(
@@ -116,9 +116,9 @@ export function useConnection(showAlert, showToast) {
 
       connected.value = true
       connectionMode.value = 'serial'
-      updateUrlQuery()
 
       await readDeviceData(serial)
+      updateUrlQuery()
     } catch (error) {
       console.error('Serial 连接失败:', error)
       showAlert(
@@ -226,14 +226,16 @@ export function useConnection(showAlert, showToast) {
    * 从 URL 查询字符串自动连接
    *
    * BLE 模式流程：
+   * 0. URL 含 pick=1 → 直接弹出手动蓝牙选择框（跳过自动连接）
    * 1. 检查 Web Bluetooth API 可用性 → 不可用则回退手动连接
    * 2. 检查 getDevices() API 可用性 → 不可用则回退手动连接
    * 3. 获取已配对设备列表 → 空列表则回退手动连接
    * 4. 遍历已配对设备尝试连接 → 全部失败则回退手动连接
    *
-   * 注意：URL 中的 mac 参数仅用于标识（书签/分享），不参与设备匹配。
-   * 原因：BluetoothDevice.id 是浏览器内部标识符，不等于固件上报的真实 MAC 地址，
-   * 无法通过 mac 参数精确匹配设备。已配对设备通常只有 1-2 个，遍历即可。
+   * URL 参数说明：
+   * - mode=ble       蓝牙模式（必填）
+   * - mac=XX:XX:...  设备 MAC 地址（标识用，不参与匹配）
+   * - pick=1         直接弹出蓝牙设备选择框（跳过自动连接）
    */
   async function autoConnectFromUrl() {
     const params = new URLSearchParams(window.location.search)
@@ -265,9 +267,9 @@ export function useConnection(showAlert, showToast) {
 
         connected.value = true
         connectionMode.value = 'serial'
-        updateUrlQuery()
 
         await readDeviceData(serial)
+        updateUrlQuery()
         console.log('[自动连接] 串口自动连接成功')
       } catch (e) {
         console.warn('[自动连接] 串口自动连接失败:', e)
@@ -279,6 +281,12 @@ export function useConnection(showAlert, showToast) {
         console.warn('[自动连接] 浏览器不支持 Web Bluetooth，尝试手动连接')
         return connectBle()
       }
+
+      if (params.get('pick') === '1') {
+        console.log('[自动连接] pick=1，直接弹出蓝牙设备选择框')
+        return connectBle()
+      }
+
       if (!('getDevices' in navigator.bluetooth)) {
         console.warn('[自动连接] 浏览器不支持 Bluetooth.getDevices()，尝试手动连接')
         return connectBle()
@@ -298,9 +306,9 @@ export function useConnection(showAlert, showToast) {
 
             connected.value = true
             connectionMode.value = 'ble'
-            updateUrlQuery()
 
             await readDeviceData(ble)
+            updateUrlQuery()
             console.log('[自动连接] BLE 自动连接成功', d.id)
             return
           } catch (_) {

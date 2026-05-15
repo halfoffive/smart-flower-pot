@@ -1,5 +1,26 @@
 # 更新日志
 
+## [2.0.1] — 2026-05-15
+
+### 修复
+- **串口首次连接提示错误**：`serial.connect()` 内部调用 `readDeviceInfo()` 可能超时导致整体失败。修复：移除 `connect()` 内的 `readDeviceInfo()` 调用，职责分离——连接只负责建立连接，数据读取由 `useConnection.js` 在连接成功后独立执行，读取失败不阻断连接状态
+- **BLE 自动连接无法运作**：串口自动连接调用 `connectSerial()` → 内部 `requestPort()` 需要用户手势，`onMounted()` 中无手势导致失败。修复：`serial.js` 新增 `connectWithPort()` 接受已授权端口直连；BLE 分支增加 `navigator.bluetooth` 可用性前置检查和详细日志
+- **保存配置无法保存**：`saveSettings()` 始终将 `waterDirection` 替换为 `WATER_DIR_SAVE_ONLY` (0xFF)，固件收到后恢复旧方向值再存 NVS，导致方向变更丢失。修复：Web 端发送实际方向值（0 或 1）；固件增加 `prevPumpSpeed` 追踪，仅当速度从 0 变为非 0 时才触发水泵，保存设置不会误触发
+- **方向始终显示正转**：同上根因，方向变更因 0xFF 标志丢失。固件 `deserializeSettings()` 将 `waterDirection` 设为 0xFF 后恢复旧值，新方向从未写入 NVS。修复后方向正确保存和显示
+- **串口连接不显示设备信息**：`DeviceInfo.vue` 的 `hasInfo` 检查 `deviceInfo.value.mac` 过于严格（MAC 为空时不显示）。修复：放宽为 `deviceInfo.value != null`；同时数据读取失败不再阻断连接
+
+### 变更
+- 固件水泵控制逻辑解耦：BLE 和串口设置写入回调中，增加 `prevPumpSpeed` 记录，仅速度从 0→非 0 时启动水泵，非 0→0 时停止水泵，手动模式中方向变更时重启水泵
+- `serial.js` 新增 `connectWithPort()` 导出函数，与 `connect()` 共享 `openAndStartReadLoop()` 内部函数
+- `useConnection.js` 新增 `readDeviceData()` 共享函数，统一 BLE/Serial 连接后数据读取逻辑
+- `useConnection.js` 移除 `WATER_DIR_SAVE_ONLY` 导入（不再使用）
+
+### 修改文件
+- `web/src/lib/serial.js` — 移除 connect 内 readDeviceInfo，新增 connectWithPort + openAndStartReadLoop
+- `web/src/composables/useConnection.js` — 分离连接与数据读取，修复自动连接，修复 saveSettings
+- `web/src/components/DeviceInfo.vue` — 放宽 hasInfo 显示条件
+- `esp32-c6/smart_flower_pot/smart_flower_pot.ino` — 水泵控制逻辑解耦（BLE + Serial 双回调）
+
 ## [2.0.0] — 2026-05-15
 
 ### 重大变更

@@ -5,6 +5,8 @@
  * 修复：
  * - 增加 userInitiatedDisconnect 标志，防止主动断开时 readLoop 触发 onDisconnectCb
  * - cleanup 前先设 connected=false，避免 readLoop 末尾重复触发回调
+ * - 移除 connect() 内的 readDeviceInfo() 调用，职责分离：连接只负责建立连接
+ * - 新增 connectWithPort() 支持 URL 自动连接（无需用户手势）
  *
  * 设计原则：
  * - 纯函数风格：数据处理函数均为无副作用纯函数
@@ -42,7 +44,7 @@ let rxBuffer = new Uint8Array(0)
 let pendingResponse = null
 
 /**
- * 连接到智能花盆串口设备
+ * 用户手动连接：弹出串口选择器（需要用户手势）
  * @param {function} onSensorData - 传感器数据回调 (buffer: ArrayBuffer) => void
  * @param {function} onDisconnect - 断开连接回调 () => void
  * @returns {Promise<boolean>}
@@ -62,21 +64,7 @@ export async function connect(onSensorData, onDisconnect) {
       ],
     })
 
-    await port.open({
-      baudRate: BAUD_RATE,
-      dataBits: 8,
-      stopBits: 1,
-      parity: 'none',
-    })
-
-    console.log('[Serial] 串口已打开，波特率:', BAUD_RATE)
-    connected = true
-
-    writer = port.writable.getWriter()
-    readLoopDone = readLoop()
-
-    const info = await readDeviceInfo()
-    console.log('[Serial] 设备信息:', info)
+    await openAndStartReadLoop()
 
     console.log('[Serial] ✅ 连接成功')
     return true
@@ -85,6 +73,53 @@ export async function connect(onSensorData, onDisconnect) {
     await cleanup()
     throw error
   }
+}
+
+/**
+ * URL 自动连接：使用已授权的串口对象直连（无需用户手势）
+ * 配合 navigator.serial.getPorts() 使用，跳过 requestPort() 步骤
+ * @param {SerialPort} serialPort - 已通过 getPorts() 获取的串口对象
+ * @param {function} onSensorData - 传感器数据回调 (buffer: ArrayBuffer) => void
+ * @param {function} onDisconnect - 断开连接回调 () => void
+ * @returns {Promise<boolean>}
+ */
+export async function connectWithPort(serialPort, onSensorData, onDisconnect) {
+  onSensorDataCb = onSensorData
+  onDisconnectCb = onDisconnect
+  userInitiatedDisconnect = false
+
+  try {
+    port = serialPort
+    console.log('[Serial] 自动连接：使用已有串口对象...')
+
+    await openAndStartReadLoop()
+
+    console.log('[Serial] ✅ 自动连接成功')
+    return true
+  } catch (error) {
+    console.error('[Serial] 自动连接失败:', error)
+    await cleanup()
+    throw error
+  }
+}
+
+/**
+ * 内部：打开串口并启动读取循环
+ * 由 connect() 和 connectWithPort() 共用
+ */
+async function openAndStartReadLoop() {
+  await port.open({
+    baudRate: BAUD_RATE,
+    dataBits: 8,
+    stopBits: 1,
+    parity: 'none',
+  })
+
+  console.log('[Serial] 串口已打开，波特率:', BAUD_RATE)
+  connected = true
+
+  writer = port.writable.getWriter()
+  readLoopDone = readLoop()
 }
 
 /**

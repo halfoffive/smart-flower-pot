@@ -6,7 +6,7 @@ import { inject, computed } from 'vue'
 
 const { deviceInfo, connectionMode } = inject('connection')
 
-const hasInfo = computed(() => deviceInfo.value && deviceInfo.value.mac)
+const hasInfo = computed(() => deviceInfo.value != null)
 
 const infoItems = computed(() => {
   const info = deviceInfo.value

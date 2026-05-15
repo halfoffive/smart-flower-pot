@@ -5,6 +5,7 @@
  * 修复：
  * - 传感器通知回调使用正确的 buffer 切片（byteOffset 处理）
  * - 增加 userInitiatedDisconnect 标志防止主动断开时 onDisconnectCb 重复触发
+ * - 新增 connectWithDevice() 支持 URL 自动连接（无需用户手势）
  */
 
 const SERVICE_UUID       = '12345678-1234-1234-1234-123456789abc'
@@ -28,7 +29,30 @@ let reconnectTimer       = null
 let userInitiatedDisconnect = false
 
 /**
- * 连接到智能花盆 BLE 设备
+ * 内部：从 GATT 服务器获取服务与特征，启动通知订阅
+ * 由 connect() 和 connectWithDevice() 共用
+ * @param {BluetoothRemoteGATTServer} gattServer
+ */
+async function setupGattConnection(gattServer) {
+  console.log('[BLE] 正在获取服务与特征...')
+  const service = await gattServer.getPrimaryService(SERVICE_UUID)
+
+  settingsChar   = await service.getCharacteristic(SETTINGS_CHAR_UUID)
+  sensorChar     = await service.getCharacteristic(SENSOR_CHAR_UUID)
+  deviceInfoChar = await service.getCharacteristic(DEVICE_INFO_UUID)
+
+  await sensorChar.startNotifications()
+  sensorChar.addEventListener('characteristicvaluechanged', (event) => {
+    const dv = event.target.value
+    const ab = dv.buffer.slice(dv.byteOffset, dv.byteOffset + dv.byteLength)
+    onSensorDataCb?.(ab)
+  })
+
+  reconnectAttempts = 0
+}
+
+/**
+ * 用户手动连接：弹出设备选择器（需要用户手势）
  * @param {function} onSensorData - 传感器数据回调 (buffer: ArrayBuffer) => void
  * @param {function} onDisconnect - 断开连接回调 () => void
  * @returns {Promise<boolean>}
@@ -51,30 +75,45 @@ export async function connect(onSensorData, onDisconnect) {
     console.log('[BLE] 正在连接 GATT 服务器...')
     server = await device.gatt.connect()
 
-    console.log('[BLE] 正在获取服务与特征...')
-    const service = await server.getPrimaryService(SERVICE_UUID)
+    await setupGattConnection(server)
 
-    settingsChar   = await service.getCharacteristic(SETTINGS_CHAR_UUID)
-    sensorChar     = await service.getCharacteristic(SENSOR_CHAR_UUID)
-    deviceInfoChar = await service.getCharacteristic(DEVICE_INFO_UUID)
-
-    await sensorChar.startNotifications()
-    sensorChar.addEventListener('characteristicvaluechanged', (event) => {
-      const dv = event.target.value
-      const ab = dv.buffer.slice(dv.byteOffset, dv.byteOffset + dv.byteLength)
-      onSensorDataCb?.(ab)
-    })
-
-    const infoValue = await deviceInfoChar.readValue()
-    const infoText  = new TextDecoder().decode(infoValue)
-    console.log('[BLE] 设备信息:', infoText)
-
-    reconnectAttempts = 0
     console.log('[BLE] ✅ 连接成功')
     return true
 
   } catch (error) {
     console.error('[BLE] 连接失败:', error)
+    cleanup()
+    throw error
+  }
+}
+
+/**
+ * URL 自动连接：使用已配对的设备对象直连（无需用户手势）
+ * 配合 navigator.bluetooth.getDevices() 使用，跳过 requestDevice() 步骤
+ * @param {BluetoothDevice} btDevice - 已通过 getDevices() 获取的设备
+ * @param {function} onSensorData - 传感器数据回调 (buffer: ArrayBuffer) => void
+ * @param {function} onDisconnect - 断开连接回调 () => void
+ * @returns {Promise<boolean>}
+ */
+export async function connectWithDevice(btDevice, onSensorData, onDisconnect) {
+  onSensorDataCb = onSensorData
+  onDisconnectCb = onDisconnect
+  userInitiatedDisconnect = false
+
+  try {
+    device = btDevice
+    device.addEventListener('gattserverdisconnected', handleDisconnect)
+
+    console.log('[BLE] 自动连接：使用已有设备对象...')
+    server = await device.gatt.connect()
+
+    await setupGattConnection(server)
+
+    console.log('[BLE] ✅ 自动连接成功')
+    return true
+
+  } catch (error) {
+    console.error('[BLE] 自动连接失败:', error)
     cleanup()
     throw error
   }
@@ -128,14 +167,6 @@ export async function readDeviceInfo() {
  */
 export function isConnected() {
   return device?.gatt?.connected ?? false
-}
-
-/**
- * 获取 BLE 设备对象（用于 URL 自动连接）
- * @returns {BluetoothDevice|null}
- */
-export function getDevice() {
-  return device
 }
 
 function handleDisconnect() {

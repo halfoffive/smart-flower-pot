@@ -165,13 +165,14 @@ class SettingsCallbacks : public BLECharacteristicCallbacks {
       uint8_t newSpeed = data[9];       // 新的水泵转速
       uint8_t newDir   = data[10];      // 新的浇水方向
 
-      // 保存旧方向值，用于"仅保存"模式恢复
-      uint8_t prevWaterDir = waterDirection;
+      // 保存旧值，用于水泵控制决策
+      uint8_t prevPumpSpeed = pumpSpeed;
+      uint8_t prevWaterDir  = waterDirection;
 
       deserializeSettings(data);
 
-      // ── "仅保存设置"模式 ──
-      // waterDirection = 0xFF 表示网页端仅保存其他设置，不改变方向也不触发水泵
+      // ── "仅保存设置"模式（向后兼容旧版 Web 端） ──
+      // waterDirection = 0xFF 表示旧版网页端仅保存其他设置，不改变方向也不触发水泵
       // 恢复旧方向值，防止 0xFF 被写入 NVS 导致自动灌溉始终反转
       if (newDir == WATER_DIR_SAVE_ONLY) {
         waterDirection = prevWaterDir;
@@ -179,23 +180,31 @@ class SettingsCallbacks : public BLECharacteristicCallbacks {
 
       saveSettings();  // 立即持久化到 NVS
 
-      // ── 手动控制模式检测 ──
+      // ── 水泵控制逻辑（解耦：方向保存与水泵触发分离） ──
+      // 新版 Web 端发送实际方向值（0 或 1），不再使用 0xFF 标志
+      // 水泵仅在速度从 0 变为非 0 时启动，避免保存设置时误触发水泵
       if (newDir == WATER_DIR_SAVE_ONLY) {
+        // 旧版兼容：仅保存设置，不触发水泵
         Serial.println("[设置] ✓ 仅保存设置（不触发水泵）");
       }
-      // 如果新转速 > 0 且系统空闲且自动灌溉不满足，则进入手动模式
-      else if (newSpeed > 0 && systemState == STATE_IDLE && !shouldStartWatering()) {
+      // 速度从 0 变为非 0：启动水泵（手动模式）
+      else if (newSpeed > 0 && prevPumpSpeed == 0 && systemState == STATE_IDLE && !shouldStartWatering()) {
         manualOverride = true;
         Serial.println("[手动控制] ▶ 网页端启动水泵（手动模式）");
         startPump(newDir == 0 ? PUMP_FORWARD : PUMP_REVERSE);
       }
-      // 如果新转速 = 0 且当前处于手动模式，则退出
-      else if (newSpeed == 0 && manualOverride) {
+      // 速度从非 0 变为 0：停止水泵（退出手动模式）
+      else if (newSpeed == 0 && prevPumpSpeed > 0 && manualOverride) {
         manualOverride = false;
         stopPump();
         Serial.println("[手动控制] ■ 网页端停止水泵，退出手动模式");
       }
-      // 如果在自动灌溉中收到设置变更，仅更新转速（PWM 实时生效）
+      // 手动模式中方向变更：重启水泵
+      else if (manualOverride && newDir != prevWaterDir && newSpeed > 0) {
+        Serial.println("[手动控制] ↻ 方向变更，重启水泵");
+        startPump(newDir == 0 ? PUMP_FORWARD : PUMP_REVERSE);
+      }
+      // 自动灌溉中收到设置变更：仅更新转速（PWM 实时生效）
       else if (systemState == STATE_WATERING && pumpState != PUMP_OFF) {
         ledcWrite(PUMP_PWM_PIN, pumpSpeed);
         Serial.printf("[自动灌溉] 转速已更新为 %d / 255\n", pumpSpeed);
@@ -303,6 +312,13 @@ void loadSettings() {
   compareMode    = prefs.getUChar(KEY_CMP_MODE,   DEFAULT_COMPARE_MODE);
   pumpSpeed      = prefs.getUChar(KEY_PUMP_SPEED, DEFAULT_PUMP_SPEED);
   waterDirection = prefs.getUChar(KEY_WATER_DIR,  DEFAULT_WATER_DIR);
+
+  // 校验浇水方向：仅允许 0(正转) 或 1(反转)
+  // 旧固件可能将 0xFF（仅保存标志）写入 NVS，导致水泵始终反转
+  if (waterDirection > 1) {
+    Serial.printf("[NVS] ⚠ 浇水方向值异常: %d，已重置为正转(0)\n", waterDirection);
+    waterDirection = DEFAULT_WATER_DIR;
+  }
 
   prefs.end();
 
@@ -472,29 +488,42 @@ void handleSerialCommand() {
                 uint8_t newSpeed = payload[9];
                 uint8_t newDir   = payload[10];
 
-                // 保存旧方向值，用于"仅保存"模式恢复
-                uint8_t prevWaterDir = waterDirection;
+                // 保存旧值，用于水泵控制决策
+                uint8_t prevPumpSpeed = pumpSpeed;
+                uint8_t prevWaterDir  = waterDirection;
 
                 deserializeSettings(payload);
 
-                // "仅保存设置"模式：恢复旧方向值，防止 0xFF 写入 NVS
+                // "仅保存设置"模式（向后兼容）：恢复旧方向值，防止 0xFF 写入 NVS
                 if (newDir == WATER_DIR_SAVE_ONLY) {
                   waterDirection = prevWaterDir;
                 }
 
                 saveSettings();
 
+                // ── 水泵控制逻辑（解耦：方向保存与水泵触发分离） ──
                 if (newDir == WATER_DIR_SAVE_ONLY) {
                   Serial.println("[Serial] ✓ 仅保存设置（不触发水泵）");
-                } else if (newSpeed > 0 && systemState == STATE_IDLE && !shouldStartWatering()) {
+                }
+                // 速度从 0 变为非 0：启动水泵（手动模式）
+                else if (newSpeed > 0 && prevPumpSpeed == 0 && systemState == STATE_IDLE && !shouldStartWatering()) {
                   manualOverride = true;
                   Serial.println("[Serial 手动控制] ▶ 启动水泵（手动模式）");
                   startPump(newDir == 0 ? PUMP_FORWARD : PUMP_REVERSE);
-                } else if (newSpeed == 0 && manualOverride) {
+                }
+                // 速度从非 0 变为 0：停止水泵（退出手动模式）
+                else if (newSpeed == 0 && prevPumpSpeed > 0 && manualOverride) {
                   manualOverride = false;
                   stopPump();
                   Serial.println("[Serial 手动控制] ■ 停止水泵，退出手动模式");
-                } else if (systemState == STATE_WATERING && pumpState != PUMP_OFF) {
+                }
+                // 手动模式中方向变更：重启水泵
+                else if (manualOverride && newDir != prevWaterDir && newSpeed > 0) {
+                  Serial.println("[Serial 手动控制] ↻ 方向变更，重启水泵");
+                  startPump(newDir == 0 ? PUMP_FORWARD : PUMP_REVERSE);
+                }
+                // 自动灌溉中：仅更新转速（PWM 实时生效）
+                else if (systemState == STATE_WATERING && pumpState != PUMP_OFF) {
                   ledcWrite(PUMP_PWM_PIN, pumpSpeed);
                   Serial.printf("[Serial 自动灌溉] 转速已更新为 %d / 255\n", pumpSpeed);
                 }

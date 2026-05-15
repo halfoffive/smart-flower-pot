@@ -61,9 +61,10 @@ Tailwind CSS 4 uses the `@tailwindcss/vite` plugin — the entry is `@import "ta
 
 - URL query string format: `?mode=ble&mac=XX:XX:XX:XX:XX:XX` or `?mode=serial`
 - On page load, `useConnection.autoConnectFromUrl()` checks URL params and attempts to connect
-- For BLE: uses `navigator.bluetooth.getDevices()` to find previously paired devices
-- For Serial: uses `navigator.serial.getPorts()` to find previously granted ports
+- For BLE: uses `navigator.bluetooth.getDevices()` to find previously paired devices, then `ble.connectWithDevice()` to connect without user gesture
+- For Serial: uses `navigator.serial.getPorts()` to find previously granted ports, then `serial.connectWithPort()` to connect without user gesture
 - After successful connection, URL is updated via `history.replaceState`
+- Auto-connect includes availability checks (`navigator.bluetooth`, `navigator.serial`, `getDevices()`) and detailed console.warn logging for troubleshooting
 
 ### PWA
 
@@ -86,7 +87,7 @@ Tailwind CSS 4 uses the `@tailwindcss/vite` plugin — the entry is `@import "ta
 
 Binary, Little-Endian, fixed-length buffers. Settings = 11 bytes, sensor data = 6 bytes. Full byte layout is in the README — the firmware and `web/src/lib/settings.js` must agree exactly on offsets and types.
 
-**Save-only flag**: Byte [10] (`waterDirection`) = `0xFF` tells firmware to save settings without triggering pump. The firmware restores the previous `waterDirection` value before saving to NVS, preventing the 0xFF from being persisted and causing auto-watering to always use reverse direction.
+**Save-only flag (legacy)**: Byte [10] (`waterDirection`) = `0xFF` tells firmware to save settings without triggering pump. The firmware restores the previous `waterDirection` value before saving to NVS. **Note**: The current Web UI no longer uses this flag — it sends the actual direction value (0 or 1). The firmware only triggers the pump when speed changes from 0 to non-zero, so saving settings with actual direction values won't accidentally start the pump. The 0xFF flag is retained for backward compatibility with older Web UI versions.
 
 **Device info**: JSON format `{"fw":"2.0.0","mac":"XX:XX:XX:XX:XX:XX","chip":"ESP32-C6","rev":1,"flash":4096,"heap":12345}`. Parsed on the web side by `parseDeviceInfo()`.
 
@@ -94,7 +95,7 @@ Binary, Little-Endian, fixed-length buffers. Settings = 11 bytes, sensor data = 
 
 Binary framed protocol over USB Serial (115200 baud). Frame format: `0xAA 0x55` header + type byte + length byte + payload + XOR checksum. Types: `0x01` sensor data, `0x02` settings, `0x03` device info, `0x04` read-settings request. The firmware parses frames in `loop()` via `handleSerialCommand()` and sends sensor data after each read. Settings/sensor payloads use the exact same 11/6 byte layouts as BLE.
 
-- `web/src/lib/serial.js` — Web Serial API wrapper. Exports `connect()`, `disconnect()`, `readSettings()`, `writeSettings()`, `readDeviceInfo()`, `isConnected()`. API surface mirrors `ble.js` so `useConnection.js` can switch between them transparently. All data-processing functions are pure functions with no side effects. Buffer operations use immutable updates.
+- `web/src/lib/serial.js` — Web Serial API wrapper. Exports `connect()`, `connectWithPort()`, `disconnect()`, `readSettings()`, `writeSettings()`, `readDeviceInfo()`, `isConnected()`. API surface mirrors `ble.js` so `useConnection.js` can switch between them transparently. `connect()` requires user gesture (calls `requestPort()`); `connectWithPort()` accepts an already-granted port for URL auto-connect. Both share `openAndStartReadLoop()` internal function. All data-processing functions are pure functions with no side effects. Buffer operations use immutable updates.
 - Serial and BLE can operate simultaneously; the firmware pushes sensor data to both channels after each sensor read.
 
 ### Code conventions
@@ -113,4 +114,5 @@ Binary framed protocol over USB Serial (115200 baud). Frame format: `0xAA 0x55` 
 - The firmware's `MAX_WATERING_MS` is **5000 (5 seconds)**, not 60 seconds. Trust the code.
 - `vite.config.js` uses CommonJS `path` module via `import` — Vite handles this, but do not convert to `import.meta.url` without verifying the build still resolves paths correctly.
 - There is no CI, no pre-commit hooks, and no automated testing of any kind.
-- **waterDirection = 0xFF** is a protocol control flag, not an actual direction. The firmware restores the previous direction value before saving to NVS. The web side maps 0xFF to 0 in `deserializeSettings()`.
+- **waterDirection = 0xFF** is a legacy protocol control flag, not an actual direction. The current Web UI sends actual direction values (0 or 1). The firmware only triggers the pump when speed changes from 0 to non-zero, so saving direction changes won't accidentally start the pump. The 0xFF flag is retained for backward compatibility.
+- **Connection vs data reading are separated**: `useConnection.js` sets `connected = true` immediately after the transport-level connection succeeds. `readSettings()` and `readDeviceInfo()` failures are non-fatal — they log warnings but don't tear down the connection or show error alerts.

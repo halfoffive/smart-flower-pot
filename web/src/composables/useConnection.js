@@ -3,6 +3,12 @@
  *
  * 统一管理 BLE / Serial 双模连接、传感器数据流、设置读写、设备信息
  * 通过 provide/inject 在组件树中共享
+ *
+ * 修复：
+ * - 连接与数据读取分离：连接失败才弹错误，读取失败仅 warn 不阻断
+ * - saveSettings 发送实际方向值，不再替换为 0xFF（方向保存与水泵触发解耦）
+ * - 串口自动连接使用 connectWithPort() 直连已授权端口（无需用户手势）
+ * - BLE 自动连接增加可用性前置检查
  */
 
 import { ref, readonly } from 'vue'
@@ -14,7 +20,6 @@ import {
   deserializeSensor,
   parseDeviceInfo,
   DEFAULT_SETTINGS,
-  WATER_DIR_SAVE_ONLY,
 } from '../lib/settings.js'
 
 /** 连接状态 */
@@ -30,9 +35,6 @@ const settings = ref({ ...DEFAULT_SETTINGS })
 /** 设备信息 */
 const deviceInfo = ref(null)
 
-/** RAF 节流锁 */
-let rafPending = false
-
 /**
  * 连接管理组合式函数
  * @param {function} showAlert - 显示错误对话框
@@ -43,13 +45,7 @@ export function useConnection(showAlert, showToast) {
 
   /** 传感器数据回调（两种连接模式共用） */
   function onSensorData(buffer) {
-    const data = deserializeSensor(buffer)
-    const wasNull = sensor.value === null
-    sensor.value = data
-
-    if (wasNull && connected.value) {
-      // 首次数据：Vue 响应式自动触发渲染
-    }
+    sensor.value = deserializeSensor(buffer)
   }
 
   /** 断开回调（设备异常断开时触发） */
@@ -60,6 +56,26 @@ export function useConnection(showAlert, showToast) {
     deviceInfo.value = null
   }
 
+  /**
+   * 连接后读取设备数据（设置 + 设备信息）
+   * 读取失败仅 console.warn，不阻断连接状态
+   */
+  async function readDeviceData(conn) {
+    try {
+      const settingsBuf = await conn.readSettings()
+      settings.value = deserializeSettings(settingsBuf)
+    } catch (e) {
+      console.warn('[连接] 读取设置失败:', e)
+    }
+
+    try {
+      const infoStr = await conn.readDeviceInfo()
+      deviceInfo.value = parseDeviceInfo(infoStr)
+    } catch (e) {
+      console.warn('[连接] 读取设备信息失败:', e)
+    }
+  }
+
   /** BLE 连接 */
   async function connectBle() {
     try {
@@ -67,14 +83,9 @@ export function useConnection(showAlert, showToast) {
 
       connected.value = true
       connectionMode.value = 'ble'
-
-      const settingsBuf = await ble.readSettings()
-      settings.value = deserializeSettings(settingsBuf)
-
-      const infoStr = await ble.readDeviceInfo()
-      deviceInfo.value = parseDeviceInfo(infoStr)
-
       updateUrlQuery()
+
+      await readDeviceData(ble)
     } catch (error) {
       console.error('BLE 连接失败:', error)
       showAlert(
@@ -94,14 +105,9 @@ export function useConnection(showAlert, showToast) {
 
       connected.value = true
       connectionMode.value = 'serial'
-
-      const settingsBuf = await serial.readSettings()
-      settings.value = deserializeSettings(settingsBuf)
-
-      const infoStr = await serial.readDeviceInfo()
-      deviceInfo.value = parseDeviceInfo(infoStr)
-
       updateUrlQuery()
+
+      await readDeviceData(serial)
     } catch (error) {
       console.error('Serial 连接失败:', error)
       showAlert(
@@ -127,7 +133,11 @@ export function useConnection(showAlert, showToast) {
     clearUrlQuery()
   }
 
-  /** 保存设置到设备 */
+  /**
+   * 保存设置到设备
+   * 发送实际方向值（0 或 1），不再使用 0xFF 标志
+   * 固件仅在速度从 0 变为非 0 时才触发水泵，保存设置不会误触发
+   */
   async function saveSettings() {
     const conn = connectionMode.value === 'ble' ? ble : serial
     if (!conn.isConnected()) {
@@ -135,8 +145,7 @@ export function useConnection(showAlert, showToast) {
       return
     }
     try {
-      const settingsToSave = { ...settings.value, waterDirection: WATER_DIR_SAVE_ONLY }
-      const buf = serializeSettings(settingsToSave)
+      const buf = serializeSettings(settings.value)
       await conn.writeSettings(buf)
       showToast('✅ 设置已保存到设备')
     } catch (error) {
@@ -174,33 +183,61 @@ export function useConnection(showAlert, showToast) {
 
     if (mode === 'serial') {
       try {
+        if (!('serial' in navigator)) return
+
         const ports = await navigator.serial.getPorts()
-        if (ports.length > 0) {
-          await connectSerial()
+        if (ports.length === 0) {
+          console.warn('[自动连接] 无已授权的串口设备')
+          return
         }
+
+        // 使用 connectWithPort 直连已授权端口，跳过 requestPort（无需用户手势）
+        await serial.connectWithPort(ports[0], onSensorData, onDisconnect)
+
+        connected.value = true
+        connectionMode.value = 'serial'
+        updateUrlQuery()
+
+        await readDeviceData(serial)
+        console.log('[自动连接] 串口自动连接成功')
       } catch (e) {
         console.warn('[自动连接] 串口自动连接失败:', e)
       }
     } else if (mode === 'ble') {
-      const targetMac = params.get('mac')
       try {
-        if ('getDevices' in navigator.bluetooth) {
-          const devices = await navigator.bluetooth.getDevices()
-          for (const d of devices) {
-            try {
-              await d.gatt.connect()
-              // 连接成功后走正常流程
-              connected.value = true
-              connectionMode.value = 'ble'
-              // 重新走完整连接流程
-              ble.disconnect()
-              await connectBle()
-              return
-            } catch (_) {
-              // 此设备不可用，尝试下一个
-            }
+        if (!('bluetooth' in navigator)) {
+          console.warn('[自动连接] 浏览器不支持 Web Bluetooth')
+          return
+        }
+        if (!('getDevices' in navigator.bluetooth)) {
+          console.warn('[自动连接] 浏览器不支持 Bluetooth.getDevices()')
+          return
+        }
+
+        const devices = await navigator.bluetooth.getDevices()
+        if (devices.length === 0) {
+          console.warn('[自动连接] 无已配对的蓝牙设备')
+          return
+        }
+
+        for (const d of devices) {
+          try {
+            // 使用 connectWithDevice 直连，跳过 requestDevice（无需用户手势）
+            await ble.connectWithDevice(d, onSensorData, onDisconnect)
+
+            connected.value = true
+            connectionMode.value = 'ble'
+            updateUrlQuery()
+
+            await readDeviceData(ble)
+            console.log('[自动连接] BLE 自动连接成功')
+            return
+          } catch (_) {
+            // 此设备不可用，尝试下一个
           }
         }
+
+        console.warn('[自动连接] 所有已配对设备均无法连接')
       } catch (e) {
         console.warn('[自动连接] BLE 自动连接失败:', e)
       }

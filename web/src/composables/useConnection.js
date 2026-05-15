@@ -8,7 +8,7 @@
  * - 连接与数据读取分离：连接失败才弹错误，读取失败仅 warn 不阻断
  * - saveSettings 发送实际方向值，不再替换为 0xFF（方向保存与水泵触发解耦）
  * - 串口自动连接使用 connectWithPort() 直连已授权端口（无需用户手势）
- * - BLE 自动连接按 MAC 地址优先匹配
+ * - BLE 自动连接：优先遍历已配对设备，全部失败或 API 不可用时回退手动连接
  * - 串口 URL 包含 USB VID/PID 标识
  * - connecting/saving 状态供 UI 显示进度
  */
@@ -222,7 +222,19 @@ export function useConnection(showAlert, showToast) {
     }) || ports[0] || null
   }
 
-  /** 从 URL 查询字符串自动连接 */
+  /**
+   * 从 URL 查询字符串自动连接
+   *
+   * BLE 模式流程：
+   * 1. 检查 Web Bluetooth API 可用性 → 不可用则回退手动连接
+   * 2. 检查 getDevices() API 可用性 → 不可用则回退手动连接
+   * 3. 获取已配对设备列表 → 空列表则回退手动连接
+   * 4. 遍历已配对设备尝试连接 → 全部失败则回退手动连接
+   *
+   * 注意：URL 中的 mac 参数仅用于标识（书签/分享），不参与设备匹配。
+   * 原因：BluetoothDevice.id 是浏览器内部标识符，不等于固件上报的真实 MAC 地址，
+   * 无法通过 mac 参数精确匹配设备。已配对设备通常只有 1-2 个，遍历即可。
+   */
   async function autoConnectFromUrl() {
     const params = new URLSearchParams(window.location.search)
     const mode = params.get('mode')
@@ -263,35 +275,24 @@ export function useConnection(showAlert, showToast) {
         connecting.value = false
       }
     } else if (mode === 'ble') {
-      try {
-        if (!('bluetooth' in navigator)) {
-          console.warn('[自动连接] 浏览器不支持 Web Bluetooth')
-          return
-        }
-        if (!('getDevices' in navigator.bluetooth)) {
-          console.warn('[自动连接] 浏览器不支持 Bluetooth.getDevices()')
-          return
-        }
+      if (!('bluetooth' in navigator)) {
+        console.warn('[自动连接] 浏览器不支持 Web Bluetooth，尝试手动连接')
+        return connectBle()
+      }
+      if (!('getDevices' in navigator.bluetooth)) {
+        console.warn('[自动连接] 浏览器不支持 Bluetooth.getDevices()，尝试手动连接')
+        return connectBle()
+      }
 
+      try {
         const devices = await navigator.bluetooth.getDevices()
         if (devices.length === 0) {
-          console.warn('[自动连接] 无已配对的蓝牙设备')
-          return
+          console.warn('[自动连接] 无已配对的蓝牙设备，尝试手动连接')
+          return connectBle()
         }
 
-        const targetMac = params.get('mac')
-
-        // 按 MAC 优先排序：匹配的设备排在前面
-        const sorted = targetMac
-          ? [...devices].sort((a, b) => {
-              if (a.id === targetMac) return -1
-              if (b.id === targetMac) return 1
-              return 0
-            })
-          : devices
-
         connecting.value = true
-        for (const d of sorted) {
+        for (const d of devices) {
           try {
             await ble.connectWithDevice(d, onSensorData, onDisconnect)
 
@@ -307,11 +308,13 @@ export function useConnection(showAlert, showToast) {
           }
         }
 
-        console.warn('[自动连接] 所有已配对设备均无法连接')
-      } catch (e) {
-        console.warn('[自动连接] BLE 自动连接失败:', e)
-      } finally {
+        console.warn('[自动连接] 所有已配对设备均无法连接，尝试手动连接')
         connecting.value = false
+        return connectBle()
+      } catch (e) {
+        console.warn('[自动连接] BLE 自动连接异常，尝试手动连接:', e)
+        connecting.value = false
+        return connectBle()
       }
     }
   }

@@ -61,10 +61,10 @@ Tailwind CSS 4 uses the `@tailwindcss/vite` plugin — the entry is `@import "ta
 
 - URL query string format: `?mode=ble&mac=XX:XX:XX:XX:XX:XX` or `?mode=serial&vid=0x10c4&pid=0xea60`
 - On page load, `useConnection.autoConnectFromUrl()` checks URL params and attempts to connect
-- For BLE: uses `navigator.bluetooth.getDevices()` to find previously paired devices. If URL contains `mac`, devices are sorted to prioritize matching MAC address (`device.id === mac`). Then `ble.connectWithDevice()` connects without user gesture
+- For BLE: uses `navigator.bluetooth.getDevices()` to find previously paired devices and tries each one. If the API is unavailable, no devices are paired, or all devices fail to connect, it falls back to `connectBle()` which triggers the browser's manual device picker (requires user gesture). The `mac` parameter in the URL is for identification/bookmarking only — it does not participate in device matching since `BluetoothDevice.id` is a browser-internal identifier that differs from the real BLE MAC address reported by the firmware
 - For Serial: uses `navigator.serial.getPorts()` to find previously granted ports. If URL contains `vid`/`pid`, ports are matched by USB vendor/product ID via `matchSerialPort()`. Then `serial.connectWithPort()` connects without user gesture
 - After successful connection, URL is updated via `history.replaceState`
-- Auto-connect includes availability checks (`navigator.bluetooth`, `navigator.serial`, `getDevices()`) and detailed console.warn logging for troubleshooting
+- Auto-connect includes availability checks and detailed console.warn logging for troubleshooting
 
 ### PWA
 

@@ -27,6 +27,7 @@
 /* ===================== 定时参数 ===================== */
 #define IDLE_INTERVAL_MS     2000   // 空闲态检测周期 2秒
 #define WATERING_INTERVAL_MS 200    // 灌溉态检测周期 200毫秒
+#define BLE_NOTIFY_INTERVAL_MS 500  // BLE 通知推送周期 0.5秒
 #define MAX_WATERING_MS      5000  // 最长灌溉时间 5秒
 
 /* ===================== BLE UUID ===================== */
@@ -94,6 +95,7 @@ SystemState   systemState       = STATE_IDLE;     // 当前系统状态
 PumpState     pumpState         = PUMP_OFF;       // 当前水泵状态
 bool          manualOverride    = false;          // 手动控制模式（来自网页测试页）
 unsigned long lastReadTime      = 0;              // 上次读取传感器的时间戳
+unsigned long lastBleNotifyTime = 0;              // 上次 BLE 通知推送的时间戳
 unsigned long wateringStartTime = 0;              // 本次灌溉开始时间戳
 
 // ── 用户可调设置 ──
@@ -163,11 +165,21 @@ class SettingsCallbacks : public BLECharacteristicCallbacks {
       uint8_t newSpeed = data[9];       // 新的水泵转速
       uint8_t newDir   = data[10];      // 新的浇水方向
 
+      // 保存旧方向值，用于"仅保存"模式恢复
+      uint8_t prevWaterDir = waterDirection;
+
       deserializeSettings(data);
+
+      // ── "仅保存设置"模式 ──
+      // waterDirection = 0xFF 表示网页端仅保存其他设置，不改变方向也不触发水泵
+      // 恢复旧方向值，防止 0xFF 被写入 NVS 导致自动灌溉始终反转
+      if (newDir == WATER_DIR_SAVE_ONLY) {
+        waterDirection = prevWaterDir;
+      }
+
       saveSettings();  // 立即持久化到 NVS
 
       // ── 手动控制模式检测 ──
-      // waterDirection = 0xFF 表示"仅保存设置"，不触发水泵
       if (newDir == WATER_DIR_SAVE_ONLY) {
         Serial.println("[设置] ✓ 仅保存设置（不触发水泵）");
       }
@@ -388,10 +400,38 @@ void sendSettingsSerial() {
   sendSerialFrame(SERIAL_TYPE_SETTINGS, buffer, 11);
 }
 
-// 通过串口发送设备信息
+// 通过串口发送设备信息（JSON 格式，包含 MAC、芯片型号等）
 void sendDeviceInfoSerial() {
-  const char *info = "智能花盆 v1.0.0";
-  sendSerialFrame(SERIAL_TYPE_DEVICE_INFO, (uint8_t *)info, strlen(info));
+  String info = buildDeviceInfoJson();
+  sendSerialFrame(SERIAL_TYPE_DEVICE_INFO, (uint8_t *)info.c_str(), info.length());
+}
+
+// 构建设备信息 JSON 字符串
+// 包含：固件版本、MAC 地址、芯片型号、芯片修订版、Flash 大小、空闲堆内存
+String buildDeviceInfoJson() {
+  uint64_t mac = ESP.getEfuseMac();
+  char macStr[18];
+  snprintf(macStr, sizeof(macStr), "%02X:%02X:%02X:%02X:%02X:%02X",
+           (uint8_t)(mac >> 40), (uint8_t)(mac >> 32),
+           (uint8_t)(mac >> 24), (uint8_t)(mac >> 16),
+           (uint8_t)(mac >> 8),  (uint8_t)(mac));
+
+  String json = "{";
+  json += "\"fw\":\"2.0.0\"";
+  json += ",\"mac\":\"";
+  json += macStr;
+  json += "\"";
+  json += ",\"chip\":\"";
+  json += ESP.getChipModel();
+  json += "\"";
+  json += ",\"rev\":";
+  json += ESP.getChipRevision();
+  json += ",\"flash\":";
+  json += ESP.getFlashChipSize() / 1024;
+  json += ",\"heap\":";
+  json += ESP.getFreeHeap();
+  json += "}";
+  return json;
 }
 
 // 处理串口接收到的命令帧
@@ -432,7 +472,16 @@ void handleSerialCommand() {
                 uint8_t newSpeed = payload[9];
                 uint8_t newDir   = payload[10];
 
+                // 保存旧方向值，用于"仅保存"模式恢复
+                uint8_t prevWaterDir = waterDirection;
+
                 deserializeSettings(payload);
+
+                // "仅保存设置"模式：恢复旧方向值，防止 0xFF 写入 NVS
+                if (newDir == WATER_DIR_SAVE_ONLY) {
+                  waterDirection = prevWaterDir;
+                }
+
                 saveSettings();
 
                 if (newDir == WATER_DIR_SAVE_ONLY) {
@@ -630,7 +679,7 @@ void setup() {
   Serial.println("\n");
   Serial.println("╔══════════════════════════════════════╗");
   Serial.println("║       智能花盆 ESP32-C6 固件         ║");
-  Serial.println("║       版本: 1.0.0                    ║");
+  Serial.println("║       版本: 2.0.0                    ║");
   Serial.println("╚══════════════════════════════════════╝");
   Serial.println();
 
@@ -680,12 +729,15 @@ void setup() {
   uint8_t initSensor[6] = {0};
   pSensorChar->setValue(initSensor, 6);
 
-  // 设备信息特征（只读）
+  // 设备信息特征（只读）— JSON 格式，包含 MAC、芯片型号等
   pDeviceInfoChar = pService->createCharacteristic(
     DEVICE_INFO_UUID,
     BLECharacteristic::PROPERTY_READ
   );
-  pDeviceInfoChar->setValue("智能花盆 v1.0.0");
+  {
+    String info = buildDeviceInfoJson();
+    pDeviceInfoChar->setValue(info.c_str());
+  }
 
   // 启动服务
   pService->start();
@@ -717,13 +769,14 @@ void loop() {
   if (deviceConnected && !oldDeviceConnected) {
     oldDeviceConnected = deviceConnected;
     Serial.println("[BLE] ✓ 客户端连接事件");
-    // 【修复】连接后立即推送一次传感器数据，消除网页端首次数据等待
+    // 连接后立即推送一次传感器数据，消除网页端首次数据等待
     readSensors();
     uint8_t sensorBuffer[6];
     serializeSensorData(sensorBuffer);
     pSensorChar->setValue(sensorBuffer, 6);
     pSensorChar->notify();
-    lastReadTime = millis();  // 重置计时器，避免重复推送
+    lastReadTime = millis();       // 重置传感器计时器
+    lastBleNotifyTime = millis();  // 重置 BLE 通知计时器
   }
 
   if (!deviceConnected && oldDeviceConnected) {
@@ -755,15 +808,17 @@ void loop() {
       checkWatering();
     }
 
-    // ── 通过 BLE 通知推送传感器数据 ──
-    if (deviceConnected) {
-      uint8_t sensorBuffer[6];
-      serializeSensorData(sensorBuffer);
-      pSensorChar->setValue(sensorBuffer, 6);
-      pSensorChar->notify();
-    }
-
     // ── 通过串口推送传感器数据 ──
     sendSensorDataSerial();
+  }
+
+  // ── BLE 通知推送（独立定时器，0.5 秒间隔） ──
+  // 与传感器读取频率解耦，BLE 连接时提供更流畅的数据更新体验
+  if (deviceConnected && (now - lastBleNotifyTime >= BLE_NOTIFY_INTERVAL_MS)) {
+    lastBleNotifyTime = now;
+    uint8_t sensorBuffer[6];
+    serializeSensorData(sensorBuffer);
+    pSensorChar->setValue(sensorBuffer, 6);
+    pSensorChar->notify();
   }
 }

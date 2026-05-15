@@ -1,5 +1,51 @@
 # 更新日志
 
+## [2.0.0] — 2026-05-15
+
+### 重大变更
+- **Vue 3 重构**：前端从原生 JS 函数式渲染迁移到 Vue 3.5.34（Composition API + `<script setup>`）
+  - 组件化架构：AppHeader、ConnectPanel、Dashboard、SensorCard、SettingsPanel、DisconnectAction、DeviceInfo
+  - 组合式函数：useConnection、useTheme、useToast（通过 provide/inject 共享状态）
+  - 纯函数库：lib/ble.js、lib/serial.js、lib/settings.js（无 Vue 依赖，可独立测试）
+  - 删除旧文件：ui.js、theme.js、toast.js、history.js、ble.js、serial.js、settings.js
+
+### 修复
+- **水泵始终显示反转**：固件 `waterDirection=0xFF`（仅保存标志）被写入 NVS，导致自动灌溉始终走 `PUMP_REVERSE`。修复：BLE/Serial 写入回调中，当 `newDir == WATER_DIR_SAVE_ONLY` 时恢复旧方向值再保存 NVS；Web 端 `deserializeSettings()` 将 0xFF 映射为 0（正转）
+- **串口首次断开提示"请先连接设备"**：`serial.js` 增加 `userInitiatedDisconnect` 标志，防止用户主动断开时 `readLoop` 触发 `onDisconnectCb` 导致状态不一致
+- **BLE 传感器数据字节偏移**：`ble.js` 通知回调使用 `dv.buffer.slice(dv.byteOffset, dv.byteOffset + dv.byteLength)` 正确提取 ArrayBuffer，与 `serial.js` 保持一致
+
+### 新增
+- **设备信息面板**：连接后显示 MAC 地址、芯片型号、芯片修订版、Flash 大小、固件版本
+- **URL 查询字符串自动连接**：`?mode=ble&mac=XX:XX:XX:XX:XX:XX` 或 `?mode=serial`，页面加载时自动尝试连接指定设备
+- **BLE 通知频率提升**：固件 BLE 通知推送与传感器读取频率解耦，BLE 连接时以 0.5 秒间隔独立推送
+- **设备信息 JSON 格式**：固件设备信息特征从纯文本 `"智能花盆 v1.0.0"` 改为 JSON `{"fw":"2.0.0","mac":"...","chip":"...","rev":1,"flash":4096,"heap":12345}`
+- **Noto Sans SC 字体**：引入 Google Fonts 中文字体，提升排版可读性
+
+### 变更
+- 固件版本升级至 2.0.0
+- Service Worker 缓存版本升级至 `flowerpot-v2`
+- `vite.config.js` 添加 `@vitejs/plugin-vue`
+- `index.html` 挂载点简化为 `<div id="app"></div>`
+
+### 修改文件
+- `web/src/App.vue` — **新增** 根组件
+- `web/src/main.js` — 重写为 Vue 3 入口
+- `web/src/lib/ble.js` — **新增**（从旧 ble.js 迁移 + bug 修复）
+- `web/src/lib/serial.js` — **新增**（从旧 serial.js 迁移 + bug 修复）
+- `web/src/lib/settings.js` — **新增**（从旧 settings.js 迁移 + bug 修复 + parseDeviceInfo）
+- `web/src/composables/useConnection.js` — **新增** 连接管理组合式函数
+- `web/src/composables/useTheme.js` — **新增** 主题管理组合式函数
+- `web/src/composables/useToast.js` — **新增** 提示框组合式函数
+- `web/src/components/*.vue` — **新增** 7 个 Vue 组件
+- `web/src/style.css` — 添加 Noto Sans SC 字体
+- `web/vite.config.js` — 添加 Vue 插件
+- `web/index.html` — Vue 挂载点 + Google Fonts 引入
+- `web/public/sw.js` — 缓存版本 v2
+- `esp32-c6/smart_flower_pot/smart_flower_pot.ino` — 修复 0xFF bug + 设备信息 JSON + BLE 独立通知频率
+- `README.md` — 更新技术栈、目录结构
+- `AGENTS.md` — 更新架构说明
+- `CHANGELOG.md` — 本文档
+
 ## [1.5.1] — 2026-05-10
 
 ### 修复

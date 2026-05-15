@@ -27,6 +27,9 @@
 - **安全保护**：最长灌溉 5 秒超时，防止水泵空转；H桥方向切换带死区保护
 - **自动重连**：Web 端蓝牙断开后自动尝试重连（最多 5 次）
 - **双模通信**：BLE 与 Serial 可同时工作，传感器数据同时推送至两种连接
+- **设备信息面板**：连接后显示 MAC 地址、芯片型号、芯片修订版、Flash 大小、固件版本
+- **URL 自动连接**：通过查询字符串 `?mode=ble&mac=XX:XX:XX:XX:XX:XX` 或 `?mode=serial` 自动连接设备
+- **BLE 高频推送**：BLE 连接时通知频率 0.5 秒，与传感器读取频率解耦
 
 ## 目录结构
 
@@ -36,7 +39,7 @@ smart-flower-pot/
 │   └── smart_flower_pot/            # Arduino IDE 目录（必须与 .ino 同名）
 │       └── smart_flower_pot.ino     # ESP32-C6 固件
 ├── web/
-│   ├── index.html                   # 主页（仪表盘 + 设置）
+│   ├── index.html                   # 主页入口
 │   ├── package.json
 │   ├── vite.config.js
 │   ├── public/
@@ -44,16 +47,26 @@ smart-flower-pot/
 │   │   ├── sw.js                    # Service Worker（离线缓存）
 │   │   └── icon.svg                 # PWA / Favicon 图标
 │   └── src/
-│       ├── style.css                # Tailwind CSS 入口 + CSS 变量主题 + 自定义动画
-│       ├── main.js                  # 主页入口（编排 BLE/Serial、UI、主题）
-│       ├── ble.js                   # Web Bluetooth 封装
-│       ├── serial.js                # Web Serial API 封装（二进制帧协议）
-│       ├── settings.js              # 设置序列化/反序列化（11 字节协议）
-│       ├── ui.js                    # 主页 UI 组件（函数式，主题感知）
-│       ├── theme.js                 # 主题管理（浅色/深色/自动三态）
-│       ├── toast.js                 # 自定义提示框（showAlert / showToast）
+│       ├── App.vue                  # 根组件（状态编排）
+│       ├── main.js                  # Vue 3 应用入口
+│       ├── style.css                # Tailwind CSS + CSS 变量主题 + 自定义动画
 │       ├── sw-register.js           # Service Worker 注册
-│       └── history.js               # 传感器历史缓存（环形队列）
+│       ├── lib/                     # 纯函数库（无 Vue 依赖）
+│       │   ├── ble.js               # Web Bluetooth 封装
+│       │   ├── serial.js            # Web Serial API 封装（二进制帧协议）
+│       │   └── settings.js          # 设置序列化/反序列化 + 设备信息解析
+│       ├── composables/             # Vue 组合式函数
+│       │   ├── useConnection.js     # 连接管理（BLE/Serial 切换、传感器、设置）
+│       │   ├── useTheme.js          # 主题管理（浅色/深色/自动三态）
+│       │   └── useToast.js          # 提示框（showAlert / showToast）
+│       └── components/              # Vue 组件
+│           ├── AppHeader.vue        # 顶部栏（标题、连接状态、主题切换）
+│           ├── ConnectPanel.vue     # 连接方式选择（蓝牙/串口）
+│           ├── Dashboard.vue        # 传感器仪表盘（2×2 卡片）
+│           ├── SensorCard.vue       # 单个传感器卡片（可复用）
+│           ├── SettingsPanel.vue    # 灌溉设置表单
+│           ├── DisconnectAction.vue # 断开连接操作
+│           └── DeviceInfo.vue       # 设备信息面板
 ├── README.md
 └── CHANGELOG.md
 ```
@@ -117,7 +130,7 @@ npm run dev
 |------|-------------|------|------|------|
 | 设置 | ...abd | Read / Write | 11 字节 | 灌溉参数 |
 | 传感器 | ...abe | Read / Notify | 6 字节 | 实时数据 |
-| 设备信息 | ...abf | Read | 字符串 | 设备名+版本 |
+| 设备信息 | ...abf | Read | JSON | 设备信息（MAC/芯片/版本） |
 
 完整 Service UUID：`12345678-1234-1234-1234-123456789abc`
 
@@ -164,7 +177,7 @@ npm run dev
 |------|------|
 | 固件 | Arduino (ESP32-C6), BLE, Preferences/NVS, DHT |
 | 通信 | Bluetooth Low Energy 5.0 (128-bit UUID) / USB Serial (115200bps) |
-| 前端框架 | Vite 8.0 |
+| 前端框架 | Vue 3.5.34 (Composition API) + Vite 8.0 |
 | UI 库 | Tailwind CSS 4.2（毛玻璃卡片 + CSS 变量主题 + 自定义动画） |
 | 主题系统 | CSS 自定义属性 + localStorage 持久化（浅色/深色/自动） |
 | PWA | Manifest + Service Worker（离线缓存） |
@@ -200,7 +213,7 @@ npm run dev
 |------|------|----------|------|
 | 0x01 | ESP32 → Web | 6 | 传感器数据（与 BLE 传感器数据结构相同） |
 | 0x02 | Web → ESP32 | 11 | 设置数据（与 BLE 设置数据结构相同） |
-| 0x03 | ESP32 → Web | 变长 | 设备信息字符串（如 "智能花盆 v1.0.0"） |
+| 0x03 | ESP32 → Web | 变长 | 设备信息 JSON（如 `{"fw":"2.0.0","mac":"...","chip":"ESP32-C6",...}`） |
 | 0x04 | Web → ESP32 | 0 | 读取设置请求（ESP32 回传 0x02 类型帧） |
 
 ### 示例：传感器数据帧

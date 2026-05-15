@@ -8,7 +8,7 @@
  */
 
 // ── 缓存版本（部署时递增即可清除旧缓存） ──
-const CACHE_NAME = 'flowerpot-v1'
+const CACHE_NAME = 'flowerpot-v2'
 
 // ── 安装事件：立即激活 ──
 self.addEventListener('install', () => {

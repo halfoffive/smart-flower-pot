@@ -1,16 +1,20 @@
 /**
  * 连接管理组合式函数
  *
- * 统一管理 BLE / Serial 双模连接、传感器数据流、设置读写、设备信息
- * 通过 provide/inject 在组件树中共享
+ * ── 职责 ──
+ * 统一管理 BLE / Serial 双模连接生命周期、传感器数据流、设置读写、设备信息
+ * 通过 provide/inject 在组件树中共享状态与方法
  *
- * 功能：
- * - 连接与数据读取分离：连接失败才弹错误，读取失败仅 warn 不阻断
+ * ── 设计原则 ──
+ * - 连接与数据读取分离：连接失败才弹错误，读取失败仅 warn 不阻断连接状态
  * - saveSettings 发送实际方向值，不再替换为 0xFF（方向保存与水泵触发解耦）
  * - 串口自动连接使用 connectWithPort() 直连已授权端口（无需用户手势）
  * - BLE 自动连接：优先遍历已配对设备，全部失败或 API 不可用时回退手动连接
- * - 串口 URL 包含 USB VID/PID 标识
- * - connecting/saving 状态供 UI 显示进度
+ * - 串口 URL 包含 USB VID/PID 标识，刷新页面对应端口自动重连
+ * - connecting/saving 状态供 UI 显示进度条与加载动画
+ *
+ * ── 状态管理（模块级 ref，useConnection 调用间共享） ──
+ * 所有 ref 在模块作用域定义，确保多组件调用共享同一状态实例
  */
 
 import { ref, readonly } from 'vue'
@@ -24,38 +28,52 @@ import {
   DEFAULT_SETTINGS,
 } from '../lib/settings.js'
 
-/** 连接状态 */
+// ═══════════════════════════════════════════
+// 模块级响应式状态（跨组件共享）
+// ═══════════════════════════════════════════
+
+/** 是否已连接设备 */
 const connected = ref(false)
+/** 当前连接模式：'ble' | 'serial' | null */
 const connectionMode = ref(null)
-
-/** 传感器数据 */
+/** 最新传感器读数（从 6 字节反序列化） */
 const sensor = ref(null)
-
-/** 设置数据 */
+/** 灌溉设置参数（与 ESP32 NVS 同步） */
 const settings = ref({ ...DEFAULT_SETTINGS })
-
-/** 设备信息 */
+/** 设备信息（固件版本、MAC、芯片型号等） */
 const deviceInfo = ref(null)
-
-/** 进度状态 */
+/** 连接操作进行中（UI 显示加载态） */
 const connecting = ref(false)
+/** 保存设置进行中（UI 显示加载态） */
 const saving = ref(false)
 
 /**
  * 连接管理组合式函数
- * @param {function} showAlert - 显示错误对话框
- * @param {function} showToast - 显示轻量通知
- * @returns {object}
+ * @param {function} showAlert - 显示错误对话框（来自 useToast）
+ * @param {function} showToast - 显示轻量通知（来自 useToast）
+ * @returns {{
+ *   connected, connectionMode, sensor, settings, deviceInfo,
+ *   connecting, saving,
+ *   connectBle, connectSerial, disconnect, saveSettings, updateSetting,
+ *   autoConnectFromUrl,
+ * }}
  */
 export function useConnection(showAlert, showToast) {
 
-  /** 传感器数据回调（两种连接模式共用） */
-  function onSensorData(buffer) {
+  /**
+   * 传感器数据回调（BLE 通知 / Serial 帧解析共用）
+   * 将原始 6 字节 buffer 反序列化为结构化传感器数据
+   * @param {ArrayBuffer} buffer - 6 字节传感器数据
+   */
+  const onSensorData = (buffer) => {
     sensor.value = deserializeSensor(buffer)
   }
 
-  /** 断开回调（设备异常断开时触发） */
-  function onDisconnect() {
+  /**
+   * 断开连接回调（设备异常断开时触发）
+   * 重置所有连接相关状态，保留设置值（允许用户离线查看）
+   */
+  const onDisconnect = () => {
     connected.value = false
     connectionMode.value = null
     sensor.value = null

@@ -1,5 +1,28 @@
 # 更新日志
 
+## [3.0.0] — 2026-05-15
+
+### 新增
+- **激进缓存策略**：Service Worker 从 Network-First 改为 Cache-First，所有静态资源缓存优先，15 天有效期
+  - 缓存响应注入 `x-sfp-cached-at` 时间戳，精确控制缓存 TTL
+  - 纯函数 `isCacheFresh()` / `createCacheEntry()` 分离缓存判断逻辑
+  - 缓存版本升至 `flowerpot-v3`，激活时自动清理旧版缓存
+  - 网络不可用时可降级返回过期缓存（离线兜底）
+- **Vite 构建优化**：`assetsInlineLimit: 0` 确保所有资源以独立文件输出，配合 SW 按 URL 精细缓存
+- **代码质量提升**：纯函数 `validateSettings()` 校验设置范围；`DEFAULT_SENSOR` 常量定义传感器初始值；`getSavedThemeMode()` / `getSystemThemeMode()` 纯函数分离主题逻辑
+
+### 变更
+- `web/public/sw.js` — 全面重写为 Cache-First 策略
+- `web/vite.config.js` — 添加 `assetsInlineLimit: 0` 及中文注释
+- `web/src/lib/settings.js` — 新增 `validateSettings()`、`DEFAULT_SENSOR`，所有函数改为箭头函数纯函数，完善中文 JSDoc
+- `web/src/composables/useTheme.js` — 提取 `getSavedThemeMode()` / `getSystemThemeMode()` 纯函数，模块化拆分副作用
+- `web/src/composables/useConnection.js` — 完善中文架构文档，抽取 `onSensorData` / `onDisconnect` 为箭头函数
+- `web/src/components/SensorCard.vue` — 完善中文 props 说明
+- `web/src/components/Dashboard.vue` — 完善中文注释
+- `README.md` — 新增缓存策略章节，更新功能特性和技术栈
+- `AGENTS.md` — 更新缓存与 SW 设计说明
+- `CHANGELOG.md` — 本文档
+
 ## [2.2.0] — 2026-05-15
 
 ### 新增

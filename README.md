@@ -18,7 +18,8 @@
 - **自动灌溉**：土壤湿度低于（或高于）阈值时自动浇水，温湿度越界自动停止
 - **BLE 远程控制**：通过 Web 蓝牙连接，实时查看传感器数据、调整灌溉参数
 - **Web Serial 串口控制**：通过 USB 数据线连接，无需蓝牙，数据传输更稳定
-- **PWA 离线支持**：可安装到桌面独立运行，断网时缓存已访问页面（Network-First 策略）
+- **PWA 离线支持**：可安装到桌面独立运行，断网时缓存已访问页面（Cache-First 策略）
+- **激进缓存策略**：Service Worker 采用缓存优先策略，所有静态资源（HTML/JS/CSS/PNG）缓存有效期 15 天，二次访问零网络开销；Vite 构建产物带内容哈希，新版本发布时自动淘汰旧缓存
 - **浅色/深色主题切换**：三态切换（浅色 ☀️ / 深色 🌙 / 跟随系统 🖥️），localStorage 持久化，预加载防闪烁
 - **毛玻璃 UI 设计**：CSS 变量驱动主题 + 毛玻璃卡片 + 渐变按钮 + 入场动画 + 状态脉冲指示
 - **卡片动画增强**：hover 微放大 + 阴影加深 + 边框高亮 + staggered 依次入场（头部 → 仪表盘 → 设置 → 操作按钮，每 75~100ms 递进）
@@ -46,7 +47,7 @@ smart-flower-pot/
 │   ├── vite.config.js
 │   ├── public/
 │   │   ├── manifest.json            # PWA 清单
-│   │   ├── sw.js                    # Service Worker（离线缓存）
+│   │   ├── sw.js                    # Service Worker（Cache-First 激进缓存，15天TTL）
 │   │   └── icon.svg                 # PWA / Favicon 图标
 │   └── src/
 │       ├── App.vue                  # 根组件（状态编排）
@@ -173,6 +174,26 @@ npm run dev
   4. 最长灌溉 5 秒超时
 ```
 
+## 缓存策略
+
+Web 前端为纯静态 SPA（无服务端渲染），采用 **Service Worker Cache-First 激进缓存** 策略：
+
+| 策略 | 说明 |
+|------|------|
+| **缓存优先** | 所有 HTTP GET 请求优先从缓存响应，命中且未过期则零网络开销 |
+| **有效期 15 天** | 缓存响应注入 `x-sfp-cached-at` 时间戳，超过 15 天自动回源更新 |
+| **内容哈希** | Vite 构建产物文件名含内容哈希（如 `assets/index.a1b2c3.js`），内容变更自动失效 |
+| **版本控制** | `CACHE_NAME` 递增触发全量缓存刷新，激活阶段自动清理旧版缓存 |
+| **离线降级** | 网络不可用时返回过期缓存（牺牲新鲜度换可用性），确保断网基本可用 |
+
+缓存流程：
+
+```
+请求到达 → 查询缓存 → 命中且 ≤15天 → 直接返回（零网络）
+                    → 过期或未命中 → 发起网络请求 → 成功 → 返回 + 更新缓存
+                                                      → 失败 → 返回过期缓存（降级）
+```
+
 ## 技术栈
 
 | 层级 | 技术 |
@@ -182,7 +203,7 @@ npm run dev
 | 前端框架 | Vue 3.5.34 (Composition API) + Vite 8.0 |
 | UI 库 | Tailwind CSS 4.2（毛玻璃卡片 + CSS 变量主题 + 自定义动画） |
 | 主题系统 | CSS 自定义属性 + localStorage 持久化（浅色/深色/自动） |
-| PWA | Manifest + Service Worker（离线缓存） |
+| PWA | Manifest + Service Worker（Cache-First 策略，15天 TTL + 离线降级） |
 | 浏览器 API | Web Bluetooth API / Web Serial API |
 
 

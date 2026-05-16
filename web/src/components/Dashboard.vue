@@ -1,6 +1,14 @@
 <script setup>
 /**
  * 传感器仪表盘 — 2×2 卡片网格
+ *
+ * 显示传感器实时数据：
+ * - 温度（°C，一位小数）
+ * - 空气湿度（%）
+ * - 土壤 ADC 原始值（0-4095）
+ * - 水泵状态（脉冲绿点 = 运行中）
+ *
+ * 无数据时显示等待提示与进度条动画
  */
 import { inject, computed } from 'vue'
 import SensorCard from './SensorCard.vue'
@@ -8,7 +16,9 @@ import { pumpLabel } from '../lib/settings.js'
 
 const { sensor } = inject('connection')
 
+/** 水泵是否处于运行状态（用于脉冲指示点闪烁） */
 const pumpActive = computed(() => sensor.value?.pump !== 0)
+/** 水泵状态中文描述 */
 const pumpText = computed(() => sensor.value ? pumpLabel(sensor.value.pump) : '停止')
 </script>
 

@@ -73,11 +73,14 @@ Tailwind CSS 4 uses the `@tailwindcss/vite` plugin — the entry is `@import "ta
 ### PWA
 
 - `public/manifest.json` — installable web app manifest (standalone display, emerald theme)
-- `public/sw.js` — Service Worker with **Cache-First** caching strategy, cache version `flowerpot-v3`
+- `public/sw.js` — Service Worker with **Cache-First** caching strategy, cache version `flowerpot-v5`
   - 所有 HTTP GET 请求缓存优先，15 天有效期
   - 缓存响应注入 `x-sfp-cached-at` 时间戳精确控制 TTL
   - 纯函数 `isCacheFresh()` / `createCacheEntry()` 分离缓存判断逻辑
   - 网络不可用时返回过期缓存（离线降级）
+  - 安装时预缓存根页面（`self.registration.scope`），确保离线刷新可用
+  - 导航请求使用 `ignoreVary: true` 匹配缓存，不受 Accept/Vary 头差异影响
+  - 离线导航完全无缓存时降级返回根页面（SPA Fallback）
   - 新版本发布时递增 `CACHE_NAME`，激活阶段自动清理旧缓存
 - `public/icon.svg` — SVG icon used as both favicon and PWA app icon
 - `src/sw-register.js` — SW registration module, only activates in production (`import.meta.env.PROD`) to avoid interfering with Vite HMR in dev
@@ -90,12 +93,13 @@ The entire web frontend is a fully static SPA (no server-side rendering). Three 
    - `vite.config.js` uses `assetsInlineLimit: 0` to emit every asset as a separate file (no base64 inlining), ensuring each URL can be individually cached by the SW.
 
 2. **Service Worker Cache-First (15-day TTL)**:
-   - On first visit: SW fetches from network, caches response with `x-sfp-cached-at` timestamp.
-   - On subsequent visits within 15 days: SW returns cached copy — zero network requests.
+   - First visit: SW installs → pre-caches root HTML → activates → controls page.
+   - During browsing: every fetched response (HTML/JS/CSS/images/fonts) is cached with `x-sfp-cached-at` timestamp.
+   - Subsequent visits within 15 days: SW returns cached copy — zero network requests.
    - After 15 days: SW fetches fresh copy from network, updates cache.
-   - Offline: SW returns even expired cache rather than showing an error.
+   - Offline refresh: SW returns cached HTML via `ignoreVary: true` matching. If the exact URL isn't cached, falls back to the root page (SPA Fallback).
 
-3. **Cache versioning**: `CACHE_NAME` (`flowerpot-v3`) acts as a deployment-level cache key. Bumping it on deploy causes the SW `activate` event to delete all other caches, ensuring a clean slate without manual clearing.
+3. **Cache versioning**: `CACHE_NAME` (`flowerpot-v5`) acts as a deployment-level cache key. Bumping it on deploy causes the SW `activate` event to delete all other caches, ensuring a clean slate without manual clearing.
 
 ### ESP32 firmware
 
@@ -137,7 +141,7 @@ Binary framed protocol over USB Serial (115200 baud). Frame format: `0xAA 0x55` 
 - When using Serial mode, close Arduino IDE's Serial Monitor first to avoid port conflicts.
 - The firmware's `MAX_WATERING_MS` is **5000 (5 seconds)**, not 60 seconds. Trust the code.
 - `vite.config.js` uses CommonJS `path` module via `import` — Vite handles this, but do not convert to `import.meta.url` without verifying the build still resolves paths correctly.
-- **Cache version MUST be bumped on EVERY deploy that changes any file**: `web/public/sw.js`'s `CACHE_NAME` (currently `flowerpot-v4`) must be incremented every time anything changes (HTML/JS/CSS/images/SW logic), or existing users will be served stale cached files until the 15-day TTL expires. The SW `activate` event only deletes caches whose name differs from the current `CACHE_NAME`. Forgetting this is the #1 cause of "my fix didn't take effect" bugs.
+- **Cache version MUST be bumped on EVERY deploy that changes any file**: `web/public/sw.js`'s `CACHE_NAME` (currently `flowerpot-v5`) must be incremented every time anything changes (HTML/JS/CSS/images/SW logic), or existing users will be served stale cached files until the 15-day TTL expires. The SW `activate` event only deletes caches whose name differs from the current `CACHE_NAME`. Forgetting this is the #1 cause of "my fix didn't take effect" bugs.
 - `assetsInlineLimit: 0` in `vite.config.js` means **no base64 inlining** — every asset is a separate file. This is intentional for SW cache granularity. If performance testing shows excessive HTTP requests, consider raising the limit, but always test SW caching behavior after the change.
 - There is no CI, no pre-commit hooks, and no automated testing of any kind.
 - **waterDirection = 0xFF** is a legacy protocol control flag, not an actual direction. The current Web UI sends actual direction values (0 or 1). The firmware only triggers the pump when speed changes from 0 to non-zero, so saving direction changes won't accidentally start the pump. The 0xFF flag is retained for backward compatibility.

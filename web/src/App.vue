@@ -28,6 +28,14 @@ provide('theme', theme)
 onMounted(() => {
   theme.initTheme()
   connection.autoConnectFromUrl()
+
+  // 启动页过渡：淡出旋转指示器，丝滑进入主界面
+  const splash = document.getElementById('splash')
+  if (splash) {
+    splash.classList.add('splash-exit')
+    // 动画结束后从 DOM 移除，不阻塞后续操作
+    splash.addEventListener('transitionend', () => splash.remove(), { once: true })
+  }
 })
 </script>
 

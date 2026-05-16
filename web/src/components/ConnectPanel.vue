@@ -3,13 +3,17 @@
  * 连接方式选择面板 — 蓝牙/串口双按钮
  */
 import { inject } from 'vue'
+import { publicPath } from '../lib/publicPath.js'
 
 const { connectBle, connectSerial, connecting } = inject('connection')
+
+/** 静态资源路径前缀（兼容域名根目录和子目录部署） */
+const imgPlant = publicPath + 'potted_plant_3d.png'
 </script>
 
 <template>
   <div class="flex flex-col items-center justify-center sfp-card rounded-2xl p-8 text-center shadow-lg animate-card-in" style="animation-delay: 100ms">
-    <img src="/potted_plant_3d.png" alt="智能花盆" class="w-16 h-16 mb-4" />
+    <img :src="imgPlant" alt="智能花盆" class="w-16 h-16 mb-4" />
     <h3 class="text-lg font-semibold text-[rgb(var(--sfp-text-primary))] mb-1">欢迎使用智能花盆</h3>
     <p class="text-sm text-[rgb(var(--sfp-text-muted))] mb-5">选择连接方式以开始监控您的智能花盆</p>
 

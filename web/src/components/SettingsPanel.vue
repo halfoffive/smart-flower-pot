@@ -3,8 +3,12 @@
  * 灌溉设置表单 — 分组布局
  */
 import { inject } from 'vue'
+import { publicPath } from '../lib/publicPath.js'
 
 const { settings, updateSetting, saveSettings, saving } = inject('connection')
+
+/** 静态资源路径前缀（兼容域名根目录和子目录部署） */
+const imgPlant = publicPath + 'potted_plant_3d.png'
 
 /** 格式化显示值：整数直接显示，浮点保留一位小数 */
 function displayValue(key, value) {
@@ -35,7 +39,7 @@ function onSelect(key, value) {
 <template>
   <div class="sfp-card rounded-2xl p-5 space-y-5 shadow-lg animate-card-in" style="animation-delay: 400ms">
     <div class="flex items-center gap-2">
-      <img src="/potted_plant_3d.png" alt="灌溉设置" class="w-6 h-6" />
+      <img :src="imgPlant" alt="灌溉设置" class="w-6 h-6" />
       <h2 class="text-base font-bold text-[rgb(var(--sfp-text-primary))]">灌溉设置</h2>
     </div>
 

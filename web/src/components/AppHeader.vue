@@ -3,8 +3,12 @@
  * 顶部栏组件 — 标题、连接状态指示、主题切换按钮
  */
 import { inject } from 'vue'
+import { publicPath } from '../lib/publicPath.js'
 
 const { connected, connectionMode } = inject('connection')
+
+/** 静态资源路径前缀（兼容域名根目录和子目录部署） */
+const imgPlant = publicPath + 'potted_plant_3d.png'
 const { themeIcon, toggleTheme } = inject('theme')
 
 const modeLabel = () => {
@@ -17,7 +21,7 @@ const modeLabel = () => {
 <template>
   <div class="flex items-center justify-between sfp-card rounded-2xl p-4 shadow-lg animate-card-in" style="animation-delay: 0ms">
     <div class="flex items-center gap-3">
-      <img src="/potted_plant_3d.png" alt="智能花盆" class="w-8 h-8" />
+      <img :src="imgPlant" alt="智能花盆" class="w-8 h-8" />
       <div>
         <h1 class="text-lg font-bold bg-gradient-to-r from-emerald-300 to-emerald-500 bg-clip-text text-transparent">
           智能花盆

@@ -4,7 +4,8 @@
 # 触发条件：推送 master 分支或手动触发 workflow_dispatch
 #
 # 构建策略：
-# - 使用 Vite --base CLI 参数注入仓库名作为 base URL
+# - 使用 bun 安装依赖并构建（比 npm 快 10-30 倍）
+# - Vite --base CLI 参数注入仓库名作为 base URL
 #   （https://<user>.github.io/<repo>/ 格式）
 # - 不修改 web/ 下任何配置文件，不影响已有的 Cloudflare Pages 部署
 # - 产出物为 web/dist/，由 actions/upload-pages-artifact 上传
@@ -29,18 +30,17 @@ jobs:
       - name: 检出代码
         uses: actions/checkout@v4
 
-      - name: 安装 Node.js
-        uses: actions/setup-node@v4
+      - name: 安装 Bun
+        uses: oven-sh/setup-bun@v2
         with:
-          node-version: 20
-          cache: npm
-          cache-dependency-path: web/package-lock.json
+          bun-version: latest
 
-      - name: 安装依赖
-        run: npm --prefix web ci
+      - name: 安装依赖（bun install）
+        run: bun install --cwd web --frozen-lockfile
 
       - name: 构建（注入仓库名作为 base URL）
-        run: npm --prefix web run build -- --base=/${{ github.event.repository.name }}/
+        # 直接调用 vite 以正确传递 --base 参数（bun run 的 -- 分隔符在 Windows 下有兼容问题）
+        run: bun --cwd web ./node_modules/vite/bin/vite.js build --base=/${{ github.event.repository.name }}/
 
       - name: 上传 Pages 产物
         uses: actions/upload-pages-artifact@v3

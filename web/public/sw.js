@@ -20,7 +20,7 @@
  *   - 带内容哈希的文件（assets/xxx.hash.js）天然免缓存冲突
  */
 
-const CACHE_NAME = 'flowerpot-v3'
+const CACHE_NAME = 'flowerpot-v4'
 const CACHE_TTL_MS = 15 * 24 * 60 * 60 * 1000 // 15 天（毫秒）
 
 /**

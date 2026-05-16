@@ -11,11 +11,15 @@ Two independent packages — no shared build, no monorepo tooling:
 
 ```bash
 # Web dev server (Chromium only — Web Bluetooth API)
-cd web && npm install && npm run dev
+cd web && bun install && bun run dev
 
 # Web production build
-npm run build
-npm run preview
+bun run build
+bun run preview
+
+# 注：Cloudflare Pages 使用默认 base=/，GitHub Pages 使用 --base=/repo-name/
+# GitHub Pages 构建（测试用）：
+bun run build -- --base=/smart-flower-pot/
 ```
 
 No test, lint, or typecheck scripts exist.
@@ -133,7 +137,7 @@ Binary framed protocol over USB Serial (115200 baud). Frame format: `0xAA 0x55` 
 - When using Serial mode, close Arduino IDE's Serial Monitor first to avoid port conflicts.
 - The firmware's `MAX_WATERING_MS` is **5000 (5 seconds)**, not 60 seconds. Trust the code.
 - `vite.config.js` uses CommonJS `path` module via `import` — Vite handles this, but do not convert to `import.meta.url` without verifying the build still resolves paths correctly.
-- **Cache version must be bumped on deploy**: `web/public/sw.js`'s `CACHE_NAME` (currently `flowerpot-v3`) must be incremented every time the app is deployed, or users will be served stale cached files until the 15-day TTL expires. The `activate` event only deletes caches whose name differs from the current `CACHE_NAME`.
+- **Cache version MUST be bumped on EVERY deploy that changes any file**: `web/public/sw.js`'s `CACHE_NAME` (currently `flowerpot-v4`) must be incremented every time anything changes (HTML/JS/CSS/images/SW logic), or existing users will be served stale cached files until the 15-day TTL expires. The SW `activate` event only deletes caches whose name differs from the current `CACHE_NAME`. Forgetting this is the #1 cause of "my fix didn't take effect" bugs.
 - `assetsInlineLimit: 0` in `vite.config.js` means **no base64 inlining** — every asset is a separate file. This is intentional for SW cache granularity. If performance testing shows excessive HTTP requests, consider raising the limit, but always test SW caching behavior after the change.
 - There is no CI, no pre-commit hooks, and no automated testing of any kind.
 - **waterDirection = 0xFF** is a legacy protocol control flag, not an actual direction. The current Web UI sends actual direction values (0 or 1). The firmware only triggers the pump when speed changes from 0 to non-zero, so saving direction changes won't accidentally start the pump. The 0xFF flag is retained for backward compatibility.

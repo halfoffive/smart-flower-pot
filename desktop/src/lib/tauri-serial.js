@@ -18,7 +18,7 @@
  *   [N+1] XOR 校验
  */
 
-import { SerialPort } from 'tauri-plugin-serialplugin'
+import { SerialPort } from 'tauri-plugin-serialplugin-api'
 
 const FRAME_HEADER_1 = 0xAA
 const FRAME_HEADER_2 = 0x55
@@ -72,6 +72,8 @@ export async function connect(path, onSensorData, onDisconnect) {
 
     connected = true
     console.log('[Serial/Tauri] 串口已打开，波特率:', BAUD_RATE)
+
+    await port.startListening()
 
     listenUnsubscribe = await port.listen((data) => {
       if (typeof data === 'string') {
@@ -349,6 +351,7 @@ async function cleanup() {
   }
 
   if (port) {
+    try { await port.cancelListen() } catch (_) { /* 忽略 */ }
     try { await port.close() } catch (_) { /* 忽略 */ }
     port = null
   }

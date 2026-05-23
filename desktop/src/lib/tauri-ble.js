@@ -5,15 +5,15 @@
  * 供 useConnection.js 透明切换，无需修改上层逻辑
  *
  * 核心流程：
- * 1. startScan() → 扫描附近 BLE 设备
- * 2. connect(address, onDisconnect) → 连接指定设备
- * 3. subscribe(charUuid, callback) → 订阅传感器通知
+ * 1. scanDevices() → 扫描附近 BLE 设备
+ * 2. connect(address, onSensorData, onDisconnect) → 连接指定设备
+ * 3. subscribe(charUuid, service, handler) → 订阅传感器通知
  * 4. read(charUuid) / send(charUuid, data) → 读写特征值
  * 5. disconnect() → 断开连接
  *
- * 数据编解码：
- * - blec 插件使用 base64 传输二进制数据
- * - 本模块负责 ArrayBuffer ↔ base64 互转
+ * 数据格式：
+ * - blec 插件使用 number[] 传输二进制数据
+ * - 本模块负责 number[] ↔ ArrayBuffer 互转
  */
 
 import {
@@ -23,10 +23,7 @@ import {
   read as blecRead,
   readString as blecReadString,
   send as blecSend,
-  sendString as blecSendString,
   subscribe as blecSubscribe,
-  getScanningUpdates,
-  getConnectionUpdates,
 } from '@mnlphlp/plugin-blec'
 
 const SERVICE_UUID       = '12345678-1234-1234-1234-123456789abc'
@@ -43,35 +40,24 @@ let onSensorDataCb      = null
 let reconnectAttempts   = 0
 let reconnectTimer      = null
 let userInitiatedDisconnect = false
-let sensorUnsubscribe   = null
-let connectionUnsubscribe = null
 
 /**
- * ArrayBuffer → base64 字符串
- * @param {ArrayBuffer} buffer
- * @returns {string}
+ * number[] → ArrayBuffer
+ * @param {number[]} numbers
+ * @returns {ArrayBuffer}
  */
-const arrayBufferToBase64 = (buffer) => {
-  const bytes = new Uint8Array(buffer)
-  let binary = ''
-  for (let i = 0; i < bytes.byteLength; i++) {
-    binary += String.fromCharCode(bytes[i])
-  }
-  return btoa(binary)
+const numbersToArrayBuffer = (numbers) => {
+  const bytes = new Uint8Array(numbers)
+  return bytes.buffer
 }
 
 /**
- * base64 字符串 → ArrayBuffer
- * @param {string} base64
- * @returns {ArrayBuffer}
+ * ArrayBuffer → number[]
+ * @param {ArrayBuffer} buffer
+ * @returns {number[]}
  */
-const base64ToArrayBuffer = (base64) => {
-  const binary = atob(base64)
-  const bytes = new Uint8Array(binary.length)
-  for (let i = 0; i < binary.length; i++) {
-    bytes[i] = binary.charCodeAt(i)
-  }
-  return bytes.buffer
+const arrayBufferToNumbers = (buffer) => {
+  return Array.from(new Uint8Array(buffer))
 }
 
 /**
@@ -81,24 +67,19 @@ const base64ToArrayBuffer = (base64) => {
  * @returns {Promise<Array>}
  */
 export async function scanDevices(timeoutMs = 5000) {
-  await startScan()
+  const allDevices = []
+  const seen = new Set()
 
-  return new Promise((resolve) => {
-    const devices = []
-    const seen = new Set()
-
-    const unlisten = getScanningUpdates((device) => {
+  await startScan((devices) => {
+    for (const device of devices) {
       if (!seen.has(device.address)) {
         seen.add(device.address)
-        devices.push(device)
+        allDevices.push(device)
       }
-    })
+    }
+  }, timeoutMs)
 
-    setTimeout(async () => {
-      if (typeof unlisten === 'function') await unlisten()
-      resolve(devices)
-    }, timeoutMs)
-  })
+  return allDevices
 }
 
 /**
@@ -152,12 +133,14 @@ export async function connectWithDevice(address, onSensorData, onDisconnect) {
 
 /**
  * 订阅传感器特征通知
+ * blec subscribe 签名: subscribe(characteristic, service, handler)
+ * handler 接收 number[]
  */
 async function subscribeSensor() {
   try {
-    sensorUnsubscribe = await blecSubscribe(SENSOR_CHAR_UUID, (data) => {
+    await blecSubscribe(SENSOR_CHAR_UUID, SERVICE_UUID, (data) => {
       if (data && onSensorDataCb) {
-        const buffer = base64ToArrayBuffer(data)
+        const buffer = numbersToArrayBuffer(data)
         onSensorDataCb(buffer)
       }
     })
@@ -183,8 +166,8 @@ export function disconnect() {
  */
 export async function readSettings() {
   if (!connectedAddress) throw new Error('未连接到设备')
-  const base64 = await blecRead(SETTINGS_CHAR_UUID)
-  return base64ToArrayBuffer(base64)
+  const numbers = await blecRead(SETTINGS_CHAR_UUID, SERVICE_UUID)
+  return numbersToArrayBuffer(numbers)
 }
 
 /**
@@ -193,8 +176,8 @@ export async function readSettings() {
  */
 export async function writeSettings(buffer) {
   if (!connectedAddress) throw new Error('未连接到设备')
-  const base64 = arrayBufferToBase64(buffer)
-  await blecSend(SETTINGS_CHAR_UUID, base64, 'withResponse')
+  const numbers = arrayBufferToNumbers(buffer)
+  await blecSend(SETTINGS_CHAR_UUID, numbers, 'withResponse', SERVICE_UUID)
   console.log('[BLE/Tauri] 已写入设置:', new Uint8Array(buffer))
 }
 
@@ -204,7 +187,7 @@ export async function writeSettings(buffer) {
  */
 export async function readDeviceInfo() {
   if (!connectedAddress) throw new Error('未连接到设备')
-  return blecReadString(DEVICE_INFO_UUID)
+  return blecReadString(DEVICE_INFO_UUID, SERVICE_UUID)
 }
 
 /**
@@ -224,10 +207,6 @@ export function getConnectedAddress() {
 }
 
 function cleanup() {
-  if (sensorUnsubscribe) {
-    try { sensorUnsubscribe() } catch (_) { /* 忽略 */ }
-    sensorUnsubscribe = null
-  }
   connectedAddress = null
 }
 

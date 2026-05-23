@@ -1,5 +1,38 @@
 # 更新日志
 
+## [4.3.1] — 2026-05-23
+
+### 修复
+- **蓝牙/串口连接卡住转圈**：连接成功后 UI 一直转圈无法进入主界面
+  - 根因：`readDeviceData()` 同步阻塞且含重试逻辑，最坏情况阻塞 34 秒+，期间 `connecting=true`
+  - 修复：连接成功后立即设 `connected=true`、`connecting=false`，`readDeviceData` 改为后台异步执行
+  - 移除重试逻辑，读取失败仅 console.warn 不阻断 UI
+- **串口就绪帧设备信息丢失**：`waitForReady` 竞态条件导致就绪信号帧的设备信息被丢弃
+  - 根因：`handleFrame` 先调用 `readyResolve()` 再处理帧类型，设备信息帧到达时 `pendingResponse` 为 null
+  - 修复：`handleFrame` 先处理帧类型再调用 `readyResolve()`；设备信息帧在无 `pendingResponse` 时缓存到 `cachedDeviceInfo`
+  - `readDeviceInfo` 优先使用缓存数据，避免重复请求
+- **BLE GATT 读取无超时**：`readSettings`/`readDeviceInfo` 可能挂起数十秒
+  - 修复：添加 10 秒超时包装（`withTimeout`），超时后抛出错误不阻断连接
+- **DeviceInfo.vue 模板引用错误**：`connection.connected.value` 引用未定义的 `connection` 属性
+  - 修复：改为使用已解构的 `connected` ref
+
+### 变更
+- `readDeviceData` 从同步阻塞改为异步非阻塞，连接后立即进入主界面
+- 串口 `handleFrame` 调整帧处理与就绪信号的执行顺序
+- Web/Tauri 端 BLE 读取操作添加 10 秒超时
+- Web/Tauri 端串口新增设备信息缓存机制
+
+### 修改文件
+- `web/src/lib/serial.js` — handleFrame 顺序修复 + cachedDeviceInfo 缓存
+- `web/src/lib/ble.js` — readSettings/readDeviceInfo withTimeout 10s
+- `web/src/composables/useConnection.js` — readDeviceData 非阻塞 + 移除重试
+- `web/src/components/DeviceInfo.vue` — 模板引用修复
+- `desktop/src/lib/tauri-serial.js` — 同步 serial.js 修复
+- `desktop/src/lib/tauri-ble.js` — 同步 ble.js 修复
+- `desktop/src/composables/useConnection.js` — 同步 useConnection.js 修复
+- `AGENTS.md` — 更新连接流程说明
+- `CHANGELOG.md` — 本文档
+
 ## [4.3.0] — 2026-05-23
 
 ### 新增

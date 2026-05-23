@@ -86,36 +86,18 @@ export function useConnection(showAlert, showToast) {
    * 读取失败仅 console.warn，不阻断连接状态
    */
   async function readDeviceData(conn) {
-    const maxRetries = 2
-
-    for (let attempt = 0; attempt <= maxRetries; attempt++) {
-      try {
-        const settingsBuf = await conn.readSettings()
-        settings.value = deserializeSettings(settingsBuf)
-        break
-      } catch (e) {
-        if (attempt < maxRetries) {
-          console.warn(`[连接] 读取设置失败 (尝试 ${attempt + 1}/${maxRetries + 1})，重试中...`)
-          await new Promise(resolve => setTimeout(resolve, 1000))
-        } else {
-          console.warn('[连接] 读取设置失败:', e)
-        }
-      }
+    try {
+      const settingsBuf = await conn.readSettings()
+      settings.value = deserializeSettings(settingsBuf)
+    } catch (e) {
+      console.warn('[连接] 读取设置失败:', e)
     }
 
-    for (let attempt = 0; attempt <= maxRetries; attempt++) {
-      try {
-        const infoStr = await conn.readDeviceInfo()
-        deviceInfo.value = parseDeviceInfo(infoStr)
-        break
-      } catch (e) {
-        if (attempt < maxRetries) {
-          console.warn(`[连接] 读取设备信息失败 (尝试 ${attempt + 1}/${maxRetries + 1})，重试中...`)
-          await new Promise(resolve => setTimeout(resolve, 1000))
-        } else {
-          console.warn('[连接] 读取设备信息失败:', e)
-        }
-      }
+    try {
+      const infoStr = await conn.readDeviceInfo()
+      deviceInfo.value = parseDeviceInfo(infoStr)
+    } catch (e) {
+      console.warn('[连接] 读取设备信息失败:', e)
     }
   }
 
@@ -127,11 +109,12 @@ export function useConnection(showAlert, showToast) {
 
       connected.value = true
       connectionMode.value = 'ble'
+      connecting.value = false
 
-      await readDeviceData(ble)
-      updateUrlQuery()
+      readDeviceData(ble).then(() => updateUrlQuery())
     } catch (error) {
       console.error('BLE 连接失败:', error)
+      connecting.value = false
       showAlert(
         '1. ESP32-C6 已上电且运行\n' +
         '2. 电脑蓝牙已开启\n' +
@@ -139,8 +122,6 @@ export function useConnection(showAlert, showToast) {
         '4. 浏览器支持 Web Bluetooth (Chrome/Edge)',
         '蓝牙连接失败'
       )
-    } finally {
-      connecting.value = false
     }
   }
 
@@ -152,19 +133,18 @@ export function useConnection(showAlert, showToast) {
 
       connected.value = true
       connectionMode.value = 'serial'
+      connecting.value = false
 
-      await readDeviceData(serial)
-      updateUrlQuery()
+      readDeviceData(serial).then(() => updateUrlQuery())
     } catch (error) {
       console.error('Serial 连接失败:', error)
+      connecting.value = false
       showAlert(
         '1. ESP32-C6 已通过 USB 连接到电脑\n' +
         '2. 未占用串口的其他程序（如 Arduino IDE 串口监视器）\n' +
         '3. 浏览器支持 Web Serial (Chrome/Edge)',
         '串口连接失败'
       )
-    } finally {
-      connecting.value = false
     }
   }
 
@@ -303,13 +283,12 @@ export function useConnection(showAlert, showToast) {
 
         connected.value = true
         connectionMode.value = 'serial'
+        connecting.value = false
 
-        await readDeviceData(serial)
-        updateUrlQuery()
+        readDeviceData(serial).then(() => updateUrlQuery())
         console.log('[自动连接] 串口自动连接成功')
       } catch (e) {
         console.warn('[自动连接] 串口自动连接失败:', e)
-      } finally {
         connecting.value = false
       }
     } else if (mode === 'ble') {
@@ -342,9 +321,9 @@ export function useConnection(showAlert, showToast) {
 
             connected.value = true
             connectionMode.value = 'ble'
+            connecting.value = false
 
-            await readDeviceData(ble)
-            updateUrlQuery()
+            readDeviceData(ble).then(() => updateUrlQuery())
             console.log('[自动连接] BLE 自动连接成功', d.id)
             return
           } catch (_) {

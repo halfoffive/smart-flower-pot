@@ -40,6 +40,7 @@ let listenUnsubscribe = null
 let rxBuffer = new Uint8Array(0)
 let pendingResponse = null
 let readyResolve = null
+let cachedDeviceInfo = null
 
 /**
  * 列出可用串口
@@ -144,6 +145,13 @@ export async function writeSettings(buffer) {
 export async function readDeviceInfo() {
   if (!connected) throw new Error('未连接到设备')
 
+  if (cachedDeviceInfo) {
+    const cached = cachedDeviceInfo
+    cachedDeviceInfo = null
+    console.log('[Serial/Tauri] 使用缓存的设备信息')
+    return new TextDecoder().decode(cached)
+  }
+
   const frame = buildFrame(TYPE_DEVICE_INFO, new Uint8Array(0))
   await writeFrame(frame)
 
@@ -240,10 +248,6 @@ function verifyFrame(frame) {
 }
 
 function handleFrame(type, payload) {
-  if (readyResolve) {
-    readyResolve()
-  }
-
   switch (type) {
     case TYPE_SENSOR:
       if (payload.length === 6) {
@@ -265,11 +269,18 @@ function handleFrame(type, payload) {
         const ab = payload.buffer.slice(payload.byteOffset, payload.byteOffset + payload.byteLength)
         pendingResponse.resolve(ab)
         pendingResponse = null
+      } else if (!cachedDeviceInfo) {
+        cachedDeviceInfo = payload.buffer.slice(payload.byteOffset, payload.byteOffset + payload.byteLength)
+        console.log('[Serial/Tauri] 已缓存就绪帧设备信息')
       }
       break
 
     default:
       console.warn('[Serial/Tauri] 未知帧类型:', type)
+  }
+
+  if (readyResolve) {
+    readyResolve()
   }
 }
 
@@ -352,4 +363,5 @@ async function cleanup() {
 
   rxBuffer = new Uint8Array(0)
   pendingResponse = null
+  cachedDeviceInfo = null
 }

@@ -80,7 +80,7 @@ Tailwind CSS 4 uses the `@tailwindcss/vite` plugin — the entry is `@import "ta
 ### PWA
 
 - `public/manifest.json` — installable web app manifest (standalone display, emerald theme)
-- `public/sw.js` — Service Worker with **Cache-First** caching strategy, cache version `flowerpot-v7`
+- `public/sw.js` — Service Worker with **Cache-First** caching strategy, cache version `flowerpot-v8`
   - 所有 HTTP GET 请求缓存优先，15 天有效期
   - 缓存响应注入 `x-sfp-cached-at` 时间戳精确控制 TTL
   - 纯函数 `isCacheFresh()` / `createCacheEntry()` 分离缓存判断逻辑
@@ -106,7 +106,7 @@ The entire web frontend is a fully static SPA (no server-side rendering). Three 
    - After 15 days: SW fetches fresh copy from network, updates cache.
    - Offline refresh: SW returns cached HTML via `ignoreVary: true` matching. If the exact URL isn't cached, falls back to the root page (SPA Fallback).
 
-3. **Cache versioning**: `CACHE_NAME` (`flowerpot-v7`) acts as a deployment-level cache key. Bumping it on deploy causes the SW `activate` event to delete all other caches, ensuring a clean slate without manual clearing.
+3. **Cache versioning**: `CACHE_NAME` (`flowerpot-v8`) acts as a deployment-level cache key. Bumping it on deploy causes the SW `activate` event to delete all other caches, ensuring a clean slate without manual clearing.
 
 ### ESP32 firmware
 
@@ -119,7 +119,7 @@ The entire web frontend is a fully static SPA (no server-side rendering). Three 
 - **Sensor polling intervals**: `IDLE_INTERVAL_MS = 2000` (2s), `WATERING_INTERVAL_MS = 200` (200ms).
 - **BLE notification interval**: `BLE_NOTIFY_INTERVAL_MS = 500` (0.5s) — independent from sensor polling, provides smoother data updates for BLE clients.
 - **Immediate push on connect**: When a BLE client connects, the firmware immediately reads sensors and pushes a notification.
-- **Serial ready signal**: At the end of `setup()`, the firmware sends a device info frame (`0x03`) as a ready signal. Clients wait for this frame (up to 5s timeout) before sending commands, avoiding communication timeout during ESP32 reset. The device info payload from the ready signal is cached (`cachedDeviceInfo`) and reused by `readDeviceInfo()` to avoid redundant requests.
+- **Serial startup delay**: After opening the serial port, the client waits 2 seconds for the ESP32 to finish resetting before sending commands. This avoids communication timeouts during ESP32 reset. There is no ready signal mechanism — the firmware no longer sends a special ready frame.
 
 ### BLE protocol
 
@@ -133,7 +133,7 @@ Binary, Little-Endian, fixed-length buffers. Settings = 11 bytes, sensor data = 
 
 Binary framed protocol over USB Serial (115200 baud). Frame format: `0xAA 0x55` header + type byte + length byte + payload + XOR checksum. Types: `0x01` sensor data, `0x02` settings, `0x03` device info, `0x04` read-settings request. The firmware parses frames in `loop()` via `handleSerialCommand()` and sends sensor data after each read. Settings/sensor payloads use the exact same 11/6 byte layouts as BLE.
 
-- `web/src/lib/serial.js` — Web Serial API wrapper. Exports `connect()`, `connectWithPort()`, `disconnect()`, `readSettings()`, `writeSettings()`, `readDeviceInfo()`, `isConnected()`, `getPortInfo()`. API surface mirrors `ble.js` so `useConnection.js` can switch between them transparently. `connect()` requires user gesture (calls `requestPort()`); `connectWithPort()` accepts an already-granted port for URL auto-connect. Both share `openAndStartReadLoop()` internal function. `getPortInfo()` returns `SerialPortInfo` (USB VID/PID) for URL query and DeviceInfo display. All data-processing functions are pure functions with no side effects. Buffer operations use immutable updates. **Serial ready signal**: `openAndStartReadLoop()` calls `waitForReady()` after opening the port, which waits for the first frame from the device (up to 5s timeout) before proceeding. **Ready frame caching**: `handleFrame()` processes frame types before calling `readyResolve()`. Device info frames received without a pending request are cached in `cachedDeviceInfo` and returned by `readDeviceInfo()` without sending a new request. USB VID filter list includes CP210x (0x10c4), CH340 (0x1a86), Espressif native USB (0x303a), and FTDI (0x0403).
+- `web/src/lib/serial.js` — Web Serial API wrapper. Exports `connect()`, `connectWithPort()`, `disconnect()`, `readSettings()`, `writeSettings()`, `readDeviceInfo()`, `isConnected()`, `getPortInfo()`. API surface mirrors `ble.js` so `useConnection.js` can switch between them transparently. `connect()` requires user gesture (calls `requestPort()`); `connectWithPort()` accepts an already-granted port for URL auto-connect. Both share `openAndStartReadLoop()` internal function. `getPortInfo()` returns `SerialPortInfo` (USB VID/PID) for URL query and DeviceInfo display. All data-processing functions are pure functions with no side effects. Buffer operations use immutable updates. **Serial startup delay**: `openAndStartReadLoop()` waits 2 seconds after opening the port for the ESP32 to finish resetting, then proceeds without any ready signal mechanism. USB VID filter list includes CP210x (0x10c4), CH340 (0x1a86), Espressif native USB (0x303a), and FTDI (0x0403).
 - Serial and BLE can operate simultaneously; the firmware pushes sensor data to both channels after each sensor read.
 
 ### Code conventions
@@ -151,13 +151,12 @@ Binary framed protocol over USB Serial (115200 baud). Frame format: `0xAA 0x55` 
 - When using Serial mode, close Arduino IDE's Serial Monitor first to avoid port conflicts.
 - The firmware's `MAX_WATERING_MS` is **5000 (5 seconds)**, not 60 seconds. Trust the code.
 - `vite.config.js` uses CommonJS `path` module via `import` — Vite handles this, but do not convert to `import.meta.url` without verifying the build still resolves paths correctly.
-- **Cache version MUST be bumped on EVERY deploy that changes any file**: `web/public/sw.js`'s `CACHE_NAME` (currently `flowerpot-v7`) must be incremented every time anything changes (HTML/JS/CSS/images/SW logic), or existing users will be served stale cached files until the 15-day TTL expires. The SW `activate` event only deletes caches whose name differs from the current `CACHE_NAME`. Forgetting this is the #1 cause of "my fix didn't take effect" bugs.
+- **Cache version MUST be bumped on EVERY deploy that changes any file**: `web/public/sw.js`'s `CACHE_NAME` (currently `flowerpot-v8`) must be incremented every time anything changes (HTML/JS/CSS/images/SW logic), or existing users will be served stale cached files until the 15-day TTL expires. The SW `activate` event only deletes caches whose name differs from the current `CACHE_NAME`. Forgetting this is the #1 cause of "my fix didn't take effect" bugs.
 - `assetsInlineLimit: 0` in `vite.config.js` means **no base64 inlining** — every asset is a separate file. This is intentional for SW cache granularity. If performance testing shows excessive HTTP requests, consider raising the limit, but always test SW caching behavior after the change.
 - There is no CI, no pre-commit hooks, and no automated testing of any kind.
 - **waterDirection = 0xFF** is a legacy protocol control flag, not an actual direction. The current Web UI sends actual direction values (0 or 1). The firmware only triggers the pump when speed changes from 0 to non-zero, so saving direction changes won't accidentally start the pump. The 0xFF flag is retained for backward compatibility.
 - **Connection vs data reading are separated**: `useConnection.js` sets `connected = true` and `connecting = false` immediately after the transport-level connection succeeds. `readDeviceData()` runs asynchronously in the background — `readSettings()` and `readDeviceInfo()` failures are non-fatal, they log warnings but don't tear down the connection or show error alerts. The UI enters the main dashboard immediately upon connection, without waiting for data reads to complete.
-- **Serial ready signal**: When opening a serial connection, the client calls `waitForReady()` which waits for the first frame from the device (up to 5s timeout). This ensures the ESP32 firmware has finished initializing before the client sends commands. If the ready signal times out, the connection proceeds anyway (graceful degradation). The device info payload from the ready frame is cached and reused by `readDeviceInfo()`.
-- **BLE read timeout**: Both `readSettings()` and `readDeviceInfo()` in `ble.js` and `tauri-ble.js` are wrapped with a 10-second timeout (`withTimeout`). If the GATT read hangs, the timeout fires and the error is caught by `readDeviceData()`, which logs a warning without blocking the UI.
+- **Serial startup delay**: When opening a serial connection, the client waits 2 seconds for the ESP32 to finish resetting. No ready signal or frame caching is used — `readDeviceInfo()` always sends an explicit request.
 - **BLE auto-reconnect requires scanning**: btleplug requires devices to be discovered via scanning before connecting. `autoReconnect()` and `tryQuickBleConnect()` both use `scanAndConnect()` which scans first, then connects. Direct `connect(address)` without prior scanning will fail.
 - **BLE scan is stream-based**: `startScan` from `@mnlphlp/plugin-blec` returns immediately — the Rust backend spawns a tokio task that scans in 200ms intervals and pushes devices via Tauri Channel. The `scanDevices()` function uses a callback pattern (`onDevice`) rather than returning an array, because the array would always be empty at the time `startScan` resolves.
 

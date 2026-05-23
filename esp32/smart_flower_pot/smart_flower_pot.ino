@@ -183,7 +183,7 @@ void sendSerialFrame(uint8_t type, uint8_t *data, uint8_t len);  // 发送串口
 void sendSensorDataSerial();                                     // 通过串口发送传感器数据
 void sendSettingsSerial();                                       // 通过串口发送设置数据
 void sendDeviceInfoSerial();                                     // 通过串口发送设备信息
-uint8_t calcXOR(uint8_t *data, uint8_t len);                     // 计算 XOR 校验
+
 
 /* ===================== BLE 回调类实现 ===================== */
 #ifndef NO_BLE
@@ -415,28 +415,17 @@ void printSensorData() {
 
 /* ===================== 串口通信实现 ===================== */
 
-// 计算 XOR 校验
-uint8_t calcXOR(uint8_t *data, uint8_t len) {
-  uint8_t xorVal = 0;
-  for (uint8_t i = 0; i < len; i++) {
-    xorVal ^= data[i];
-  }
-  return xorVal;
-}
 
-// 发送串口帧：帧头 + 类型 + 长度 + 数据 + XOR 校验
+
 void sendSerialFrame(uint8_t type, uint8_t *data, uint8_t len) {
-  uint8_t frame[64];  // 足够容纳最大帧
-  uint8_t idx = 0;
-  frame[idx++] = SERIAL_FRAME_HEAD1;
-  frame[idx++] = SERIAL_FRAME_HEAD2;
-  frame[idx++] = type;
-  frame[idx++] = len;
-  for (uint8_t i = 0; i < len; i++) {
-    frame[idx++] = data[i];
-  }
-  frame[idx++] = calcXOR(frame, idx);
-  Serial.write(frame, idx);
+  Serial.write(SERIAL_FRAME_HEAD1);
+  Serial.write(SERIAL_FRAME_HEAD2);
+  Serial.write(type);
+  Serial.write(len);
+  Serial.write(data, len);
+  uint8_t xorVal = SERIAL_FRAME_HEAD1 ^ SERIAL_FRAME_HEAD2 ^ type ^ len;
+  for (uint8_t i = 0; i < len; i++) xorVal ^= data[i];
+  Serial.write(xorVal);
 }
 
 // 通过串口发送传感器数据（6 字节）
@@ -470,7 +459,7 @@ String buildDeviceInfoJson() {
            (uint8_t)(mac >> 8), (uint8_t)(mac));
 
   String json = "{";
-  json += "\"fw\":\"4.3.0\"";
+  json += "\"fw\":\"4.3.2\"";
   json += ",\"mac\":\"";
   json += macStr;
   json += "\"";
@@ -512,7 +501,8 @@ void handleSerialCommand() {
       if (rxIndex >= totalLen) {
         // 验证 XOR 校验
         uint8_t xorReceived = rxBuffer[totalLen - 1];
-        uint8_t xorCalculated = calcXOR(rxBuffer, totalLen - 1);
+        uint8_t xorCalculated = 0;
+        for (uint8_t j = 0; j < totalLen - 1; j++) xorCalculated ^= rxBuffer[j];
 
         if (xorReceived == xorCalculated) {
           uint8_t type = rxBuffer[2];
@@ -541,58 +531,46 @@ void handleSerialCommand() {
 
                   // ── 水泵控制逻辑（解耦：方向保存与水泵触发分离） ──
                   if (newDir == WATER_DIR_SAVE_ONLY) {
-                    Serial.println("[Serial] ✓ 仅保存设置（不触发水泵）");
                   }
                   // 速度从 0 变为非 0：启动水泵（手动模式）
                   else if (newSpeed > 0 && prevPumpSpeed == 0 && systemState == STATE_IDLE && !shouldStartWatering()) {
                     manualOverride = true;
-                    Serial.println("[Serial 手动控制] ▶ 启动水泵（手动模式）");
                     startPump(newDir == 0 ? PUMP_FORWARD : PUMP_REVERSE);
                   }
                   // 速度从非 0 变为 0：停止水泵（退出手动模式）
                   else if (newSpeed == 0 && prevPumpSpeed > 0 && manualOverride) {
                     manualOverride = false;
                     stopPump();
-                    Serial.println("[Serial 手动控制] ■ 停止水泵，退出手动模式");
                   }
                   // 手动模式中方向变更：重启水泵
                   else if (manualOverride && newDir != prevWaterDir && newSpeed > 0) {
-                    Serial.println("[Serial 手动控制] ↻ 方向变更，重启水泵");
                     startPump(newDir == 0 ? PUMP_FORWARD : PUMP_REVERSE);
                   }
                   // 自动灌溉中：仅更新转速（PWM 实时生效）
                   else if (systemState == STATE_WATERING && pumpState != PUMP_OFF) {
                     ledcWrite(PUMP_PWM_PIN, pumpSpeed);
-                    Serial.printf("[Serial 自动灌溉] 转速已更新为 %d / 255\n", pumpSpeed);
                   }
 
-                  Serial.println("[Serial] 设置已更新并保存到闪存");
-                }
+                  }
                 break;
               }
 
             case SERIAL_TYPE_READ_SETTINGS:
               {
-                // 收到读取设置请求
-                Serial.println("[Serial] 收到读取设置请求");
                 sendSettingsSerial();
                 break;
               }
 
             case SERIAL_TYPE_DEVICE_INFO:
               {
-                // 收到读取设备信息请求
-                Serial.println("[Serial] 收到读取设备信息请求");
                 sendDeviceInfoSerial();
                 break;
               }
 
             default:
-              Serial.printf("[Serial] 未知帧类型: 0x%02X\n", type);
               break;
           }
         } else {
-          Serial.println("[Serial] 帧校验失败，丢弃");
         }
 
         rxIndex = 0;  // 重置缓冲区
@@ -753,7 +731,7 @@ void setup() {
   Serial.print("║       芯片: ");
   Serial.print(ESP.getChipModel());
   Serial.println("                ║");
-  Serial.println("║       版本: 4.3.0                    ║");
+  Serial.println("║       版本: 4.3.2                    ║");
   Serial.println("╚══════════════════════════════════════╝");
   Serial.println();
 
@@ -833,8 +811,7 @@ void setup() {
   // ── 发送就绪信号（串口帧），通知客户端固件已启动 ──
   sendDeviceInfoSerial();
   Serial.flush();
-  Serial.println("[系统] 固件已就绪，串口通信已启动");
-}
+  }
 
 /* ===================== 主循环 loop() ===================== */
 

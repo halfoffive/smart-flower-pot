@@ -1,5 +1,31 @@
 # 更新日志
 
+## [4.3.2] — 2026-05-23
+
+### 紧急修复
+
+- **固件崩溃：sendSerialFrame 缓冲区溢出**：`frame[64]` 无法容纳 79 字节设备信息 JSON（总帧 84 字节），写入越界触发 Stack smashing protect failure
+  - 修复：改为逐字节发送（Serial.write），完全消除栈缓冲区
+  - 同时移除了 calcXOR 函数，改为内联计算
+- **固件串口调试噪声**：删除 handleSerialCommand 和 setup() 中混入二进制流的 Serial.println 调试打印
+- **固件版本号**：4.3.0 → 4.3.2
+
+### 改进
+
+- **删除串口 waitForReady 就绪等待机制**：用固定 2 秒延时替代，消除竞态条件和 1-5 秒阻塞
+- **删除 BLE readValue 的 withTimeout 包装**：Web Bluetooth 已有内置超时
+- **删除串口设备信息缓存（cachedDeviceInfo）**：随 waitForReady 一并移除
+
+### 修改文件
+
+- `esp32/smart_flower_pot/smart_flower_pot.ino` — sendSerialFrame 溢出修复 + 清理调试打印
+- `web/src/lib/serial.js` — 删除 waitForReady/cachedDeviceInfo，添加 2s 延时
+- `web/src/lib/ble.js` — 删除 withTimeout
+- `desktop/src/lib/tauri-serial.js` — 同步 serial.js 修复
+- `desktop/src/lib/tauri-ble.js` — 同步 ble.js 修复
+- `web/public/sw.js` — v7 → v8
+- version bump: web/desktop/tauri → 4.3.2
+
 ## [4.3.1] — 2026-05-23
 
 ### 修复

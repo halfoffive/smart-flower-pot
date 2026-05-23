@@ -103,15 +103,6 @@ const isFlowerPotDevice = (device) => {
  * @param {function} onDevice - 发现新设备时的回调 (device: BleDevice) => void
  * @param {number} [timeoutMs=10000] - 扫描持续时间
  */
-function withTimeout(promise, ms) {
-  return Promise.race([
-    promise,
-    new Promise((_, reject) =>
-      setTimeout(() => reject(new Error(`操作超时 (${ms}ms)`)), ms)
-    ),
-  ])
-}
-
 export async function scanDevices(onDevice, timeoutMs = 10000) {
   const seen = new Set()
 
@@ -314,7 +305,7 @@ export function disconnect() {
  */
 export async function readSettings() {
   if (!connectedAddress) throw new Error('未连接到设备')
-  const numbers = await withTimeout(blecRead(SETTINGS_CHAR_UUID, SERVICE_UUID), 10000)
+  const numbers = await blecRead(SETTINGS_CHAR_UUID, SERVICE_UUID)
   return numbersToArrayBuffer(numbers)
 }
 
@@ -335,7 +326,7 @@ export async function writeSettings(buffer) {
  */
 export async function readDeviceInfo() {
   if (!connectedAddress) throw new Error('未连接到设备')
-  return withTimeout(blecReadString(DEVICE_INFO_UUID, SERVICE_UUID), 10000)
+  return blecReadString(DEVICE_INFO_UUID, SERVICE_UUID)
 }
 
 /**

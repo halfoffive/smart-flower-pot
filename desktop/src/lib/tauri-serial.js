@@ -27,6 +27,11 @@ const TYPE_SETTINGS = 0x02
 const TYPE_DEVICE_INFO = 0x03
 const TYPE_READ_SETTINGS = 0x04
 const BAUD_RATE = 115200
+
+function delay(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
+
 const FRAME_PAYLOAD_OFFSET = 4
 const FRAME_CHECKSUM_BYTES = 1
 
@@ -39,8 +44,6 @@ let listenUnsubscribe = null
 
 let rxBuffer = new Uint8Array(0)
 let pendingResponse = null
-let readyResolve = null
-let cachedDeviceInfo = null
 
 /**
  * 列出可用串口
@@ -83,7 +86,7 @@ export async function connect(path, onSensorData, onDisconnect) {
       processRxBuffer()
     }, false)
 
-    await waitForReady()
+    await delay(2000)
 
     console.log('[Serial/Tauri] ✅ 连接成功')
     return true
@@ -144,13 +147,6 @@ export async function writeSettings(buffer) {
  */
 export async function readDeviceInfo() {
   if (!connected) throw new Error('未连接到设备')
-
-  if (cachedDeviceInfo) {
-    const cached = cachedDeviceInfo
-    cachedDeviceInfo = null
-    console.log('[Serial/Tauri] 使用缓存的设备信息')
-    return new TextDecoder().decode(cached)
-  }
 
   const frame = buildFrame(TYPE_DEVICE_INFO, new Uint8Array(0))
   await writeFrame(frame)
@@ -269,18 +265,11 @@ function handleFrame(type, payload) {
         const ab = payload.buffer.slice(payload.byteOffset, payload.byteOffset + payload.byteLength)
         pendingResponse.resolve(ab)
         pendingResponse = null
-      } else if (!cachedDeviceInfo) {
-        cachedDeviceInfo = payload.buffer.slice(payload.byteOffset, payload.byteOffset + payload.byteLength)
-        console.log('[Serial/Tauri] 已缓存就绪帧设备信息')
       }
       break
 
     default:
       console.warn('[Serial/Tauri] 未知帧类型:', type)
-  }
-
-  if (readyResolve) {
-    readyResolve()
   }
 }
 
@@ -308,23 +297,6 @@ function calculateXOR(data, length) {
 
 async function writeFrame(frame) {
   await port.writeBinary(frame)
-}
-
-function waitForReady(timeoutMs = 5000) {
-  return new Promise((resolve) => {
-    const timer = setTimeout(() => {
-      readyResolve = null
-      console.warn('[Serial/Tauri] 等待设备就绪超时，继续连接...')
-      resolve(false)
-    }, timeoutMs)
-
-    readyResolve = () => {
-      clearTimeout(timer)
-      readyResolve = null
-      console.log('[Serial/Tauri] 设备已就绪')
-      resolve(true)
-    }
-  })
 }
 
 function waitForResponse(expectedType, timeoutMs) {
@@ -363,5 +335,4 @@ async function cleanup() {
 
   rxBuffer = new Uint8Array(0)
   pendingResponse = null
-  cachedDeviceInfo = null
 }

@@ -57,15 +57,6 @@ async function setupGattConnection(gattServer) {
  * @param {function} onDisconnect - 断开连接回调 () => void
  * @returns {Promise<boolean>}
  */
-function withTimeout(promise, ms) {
-  return Promise.race([
-    promise,
-    new Promise((_, reject) =>
-      setTimeout(() => reject(new Error(`操作超时 (${ms}ms)`)), ms)
-    ),
-  ])
-}
-
 export async function connect(onSensorData, onDisconnect) {
   onSensorDataCb = onSensorData
   onDisconnectCb = onDisconnect
@@ -146,7 +137,7 @@ export function disconnect() {
  */
 export async function readSettings() {
   if (!settingsChar) throw new Error('未连接到设备')
-  const value = await withTimeout(settingsChar.readValue(), 10000)
+  const value = await settingsChar.readValue()
   return value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength)
 }
 
@@ -166,7 +157,7 @@ export async function writeSettings(buffer) {
  */
 export async function readDeviceInfo() {
   if (!deviceInfoChar) throw new Error('未连接到设备')
-  const value = await withTimeout(deviceInfoChar.readValue(), 10000)
+  const value = await deviceInfoChar.readValue()
   return new TextDecoder().decode(value)
 }
 

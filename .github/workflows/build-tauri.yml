@@ -7,11 +7,11 @@
 # - 使用 bun 安装前端依赖
 # - 使用 tauri-action 构建全平台桌面/移动客户端
 # - 构建产物自动上传到 GitHub Release（预发布，非草稿）
-# - 支持 Windows x64、Linux x64、macOS (Arm + Intel)、Android APK、iOS
+# - 支持 Windows x64、Linux x64、macOS (Arm + Intel)、Android APK
 #
 # 所需 GitHub Secrets：
 # - ANDROID_KEY_ALIAS: Android 签名密钥别名
-# - ANDROID_KEY_BASE64: Android 签名密钥（base64 编码）
+# - ANDROID_KEY_BASE64: Android 签名密钥（base64 编码，单行无换行）
 # - ANDROID_KEY_PASSWORD: Android 签名密钥密码
 # ============================================================
 
@@ -47,9 +47,6 @@ jobs:
           - platform: "ubuntu-latest"
             args: ""
             mobile: "android"
-          - platform: "macos-latest"
-            args: ""
-            mobile: "ios"
 
     runs-on: ${{ matrix.platform }}
 
@@ -59,6 +56,8 @@ jobs:
 
       - name: 安装 Bun
         uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.2.14"
 
       - name: 安装前端依赖
         run: bun install --cwd desktop
@@ -75,12 +74,6 @@ jobs:
         with:
           targets: aarch64-linux-android,armv7-linux-androideabi,i686-linux-android,x86_64-linux-android
 
-      - name: 安装 Rust stable（iOS）
-        if: matrix.mobile == 'ios'
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: aarch64-apple-ios
-
       - name: 缓存 Rust 构建产物
         uses: Swatinem/rust-cache@v2
         with:
@@ -88,10 +81,10 @@ jobs:
           workspaces: desktop/src-tauri -> target
 
       - name: 安装 Linux 系统依赖
-        if: matrix.platform == 'ubuntu-22.04'
+        if: startsWith(matrix.platform, 'ubuntu')
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev libdbus-1-dev pkg-config libudev-dev
 
       - name: 安装 JDK（Android）
         if: matrix.mobile == 'android'
@@ -122,7 +115,7 @@ jobs:
           cd desktop/src-tauri/gen/android
           echo "keyAlias=${{ secrets.ANDROID_KEY_ALIAS }}" > keystore.properties
           echo "password=${{ secrets.ANDROID_KEY_PASSWORD }}" >> keystore.properties
-          echo "${{ secrets.ANDROID_KEY_BASE64 }}" | base64 -d > $RUNNER_TEMP/keystore.jks
+          echo "${{ secrets.ANDROID_KEY_BASE64 }}" | tr -d '\n\r' | base64 -d > "$RUNNER_TEMP/keystore.jks"
           echo "storeFile=$RUNNER_TEMP/keystore.jks" >> keystore.properties
 
       - name: 注入 Android release 签名配置

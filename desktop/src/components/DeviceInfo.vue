@@ -3,11 +3,9 @@
  * 设备信息面板 — 显示 MAC、芯片型号、固件版本、USB 标识等
  */
 import { inject, computed } from 'vue'
-import * as serial from '../lib/serial.js'
-import { publicPath } from '../lib/publicPath.js'
+import * as serial from '../lib/tauri-serial.js'
 
-/** 静态资源路径前缀（兼容域名根目录和子目录部署） */
-const imgPlant = publicPath + 'potted_plant_3d.png'
+const imgPlant = 'potted_plant_3d.png'
 
 const { deviceInfo, connectionMode } = inject('connection')
 

@@ -3,12 +3,10 @@
  * 顶部栏组件 — 标题、连接状态指示、主题切换按钮
  */
 import { inject } from 'vue'
-import { publicPath } from '../lib/publicPath.js'
 
 const { connected, connectionMode } = inject('connection')
 
-/** 静态资源路径前缀（兼容域名根目录和子目录部署） */
-const imgPlant = publicPath + 'potted_plant_3d.png'
+const imgPlant = 'potted_plant_3d.png'
 const { themeIcon, toggleTheme } = inject('theme')
 
 const modeLabel = () => {

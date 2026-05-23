@@ -13,10 +13,8 @@
 import { inject, computed } from 'vue'
 import SensorCard from './SensorCard.vue'
 import { pumpLabel } from '../lib/settings.js'
-import { publicPath } from '../lib/publicPath.js'
 
-/** 静态资源路径前缀（兼容域名根目录和子目录部署） */
-const imgPlant = publicPath + 'potted_plant_3d.png'
+const imgPlant = 'potted_plant_3d.png'
 
 const { sensor } = inject('connection')
 

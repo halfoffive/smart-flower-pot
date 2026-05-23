@@ -3,12 +3,10 @@
  * 灌溉设置表单 — 分组布局
  */
 import { inject } from 'vue'
-import { publicPath } from '../lib/publicPath.js'
 
 const { settings, updateSetting, saveSettings, saving } = inject('connection')
 
-/** 静态资源路径前缀（兼容域名根目录和子目录部署） */
-const imgPlant = publicPath + 'potted_plant_3d.png'
+const imgPlant = 'potted_plant_3d.png'
 
 /** 格式化显示值：整数直接显示，浮点保留一位小数 */
 function displayValue(key, value) {

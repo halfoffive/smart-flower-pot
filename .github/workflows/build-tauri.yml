@@ -1,0 +1,130 @@
+# ============================================================
+# Tauri 客户端构建与发布
+#
+# 触发条件：手动运行 workflow_dispatch
+#
+# 构建策略：
+# - 使用 bun 安装前端依赖
+# - 使用 tauri-action 构建全平台桌面/移动客户端
+# - 构建产物自动上传到 GitHub Release（预发布，非草稿）
+# - 支持 Windows x64、Linux x64、macOS (Arm + Intel)、Android APK、iOS
+#
+# 所需 GitHub Secrets：
+# - ANDROID_KEY_ALIAS: Android 签名密钥别名
+# - ANDROID_KEY_BASE64: Android 签名密钥（base64 编码）
+# - ANDROID_KEY_PASSWORD: Android 签名密钥密码
+# ============================================================
+
+name: Build Tauri Client
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: tauri-build
+  cancel-in-progress: true
+
+jobs:
+  build:
+    permissions:
+      contents: write
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: "macos-latest"
+            args: "--target aarch64-apple-darwin"
+          - platform: "macos-latest"
+            args: "--target x86_64-apple-darwin"
+          - platform: "ubuntu-22.04"
+            args: ""
+          - platform: "windows-latest"
+            args: ""
+          - platform: "ubuntu-latest"
+            args: "--apk true --target aarch64"
+            mobile: "android"
+          - platform: "macos-latest"
+            args: ""
+            mobile: "ios"
+
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: 安装前端依赖
+        run: bun install --cwd desktop --frozen-lockfile
+
+      - name: 安装 Rust stable（桌面端）
+        if: matrix.mobile == ''
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      - name: 安装 Rust stable（Android）
+        if: matrix.mobile == 'android'
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi,i686-linux-android,x86_64-linux-android
+
+      - name: 缓存 Rust 构建产物
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+          workspaces: desktop/src-tauri -> target
+
+      - name: 安装 Linux 系统依赖
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev
+
+      - name: 安装 JDK（Android）
+        if: matrix.mobile == 'android'
+        uses: actions/setup-java@v5
+        with:
+          java-version: "17"
+          distribution: "temurin"
+
+      - name: 安装 Android SDK
+        if: matrix.mobile == 'android'
+        uses: android-actions/setup-android@v3
+
+      - name: 安装 Android NDK
+        if: matrix.mobile == 'android'
+        uses: nttld/setup-ndk@v1
+        id: setup-ndk
+        with:
+          ndk-version: r29
+          link-to-sdk: true
+
+      - name: 配置 Android 签名
+        if: matrix.mobile == 'android'
+        run: |
+          cd desktop/src-tauri/gen/android
+          echo "keyAlias=${{ secrets.ANDROID_KEY_ALIAS }}" > keystore.properties
+          echo "password=${{ secrets.ANDROID_KEY_PASSWORD }}" >> keystore.properties
+          base64 -d <<< "${{ secrets.ANDROID_KEY_BASE64 }}" > $RUNNER_TEMP/keystore.jks
+          echo "storeFile=$RUNNER_TEMP/keystore.jks" >> keystore.properties
+
+      - name: 构建 Tauri 应用并发布
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+        with:
+          projectPath: desktop
+          tagName: app-v__VERSION__
+          releaseName: "智能花盆 v__VERSION__"
+          releaseBody: "智能花盆 Tauri 客户端。请根据您的操作系统下载对应的安装包。"
+          releaseDraft: false
+          prerelease: true
+          args: ${{ matrix.args }}
+          mobile: ${{ matrix.mobile }}

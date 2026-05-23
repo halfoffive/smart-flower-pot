@@ -1,5 +1,24 @@
 # 更新日志
 
+## [4.0.0] — 2026-05-16
+
+### 新增
+- **Tauri 桌面/移动客户端**：基于 Tauri 2 的原生客户端，支持 Windows、macOS、Linux、Android、iOS
+  - 原生 BLE 连接：基于 `tauri-plugin-blec`（btleplug），应用内扫描设备并选择连接
+  - 原生串口连接：基于 `tauri-plugin-serialplugin`，应用内列出可用串口并选择连接
+  - 自动重连：使用 `tauri-plugin-store` 持久化上次连接信息，应用重启后自动连接
+  - Deep Link：通过 `smart-flower-pot://connect?mode=ble&mac=XX:XX:XX:XX:XX:XX` 启动并自动连接设备
+  - 设备/串口选择 UI：应用内实现设备扫描列表和串口列表选择（替代浏览器原生弹窗）
+- **GitHub Actions CI/CD**：手动触发构建，全平台构建产物自动上传到 GitHub Release（预发布，非草稿）
+  - 构建矩阵：macOS (Arm + Intel)、Ubuntu、Windows、Android APK、iOS
+  - 使用 `tauri-apps/tauri-action@v0`
+
+### 变更
+- `.gitignore` — 追加 `desktop/dist/`、`desktop/src-tauri/target/`、`desktop/src-tauri/gen/`
+- `README.md` — 新增 Tauri 客户端章节、更新目录结构和技术栈
+- `AGENTS.md` — 新增 desktop 包说明、Tauri 架构、Deep Link、自动重连、CI/CD 说明
+- `CHANGELOG.md` — 本文档
+
 ## [3.0.0] — 2026-05-15
 
 ### 新增

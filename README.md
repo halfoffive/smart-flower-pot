@@ -70,6 +70,33 @@ smart-flower-pot/
 │           ├── SettingsPanel.vue    # 灌溉设置表单
 │           ├── DisconnectAction.vue # 断开连接操作
 │           └── DeviceInfo.vue       # 设备信息面板
+├── desktop/
+│   ├── index.html                   # Tauri 客户端入口
+│   ├── package.json
+│   ├── vite.config.js
+│   ├── public/
+│   │   └── potted_plant_3d.png      # 应用图标
+│   ├── src/
+│   │   ├── App.vue                  # 根组件（deep-link + 自动重连）
+│   │   ├── main.js                  # Vue 3 应用入口（无 Service Worker）
+│   │   ├── style.css                # Tailwind CSS + CSS 变量主题
+│   │   ├── lib/
+│   │   │   ├── tauri-ble.js         # tauri-plugin-blec 适配层
+│   │   │   ├── tauri-serial.js      # tauri-plugin-serialplugin 适配层
+│   │   │   └── settings.js          # 设置序列化/反序列化（与 Web 端共享）
+│   │   ├── composables/
+│   │   │   ├── useConnection.js     # 连接管理（Tauri 插件 + Store + Deep Link）
+│   │   │   ├── useTheme.js          # 主题管理
+│   │   │   └── useToast.js          # 提示框
+│   │   └── components/              # Vue 组件（含设备/串口选择 UI）
+│   └── src-tauri/
+│       ├── Cargo.toml               # Rust 依赖
+│       ├── tauri.conf.json          # Tauri 配置（deep-link scheme、窗口）
+│       ├── capabilities/default.json # 插件权限
+│       ├── icons/                   # 应用图标
+│       └── src/
+│           ├── lib.rs               # Rust 入口（注册所有插件）
+│           └── main.rs              # Windows 子系统入口
 ├── README.md
 └── CHANGELOG.md
 ```
@@ -112,7 +139,33 @@ npm run dev
 4. 在弹出的串口列表中选择 ESP32-C6 对应的 COM 端口
 5. 连接成功后头部显示「已连接 · 串口」
 
-### 3. 使用说明
+### 3. Tauri 客户端（桌面/移动）
+
+基于 Tauri 2 的原生客户端，支持 Windows、macOS、Linux、Android、iOS。
+
+```bash
+cd desktop
+bun install
+bun run tauri dev
+```
+
+#### 功能特性
+- **原生 BLE 连接**：基于 btleplug，应用内扫描设备并选择连接
+- **原生串口连接**：应用内列出可用串口并选择连接
+- **自动重连**：关闭应用后重新打开，自动连接上次设备
+- **Deep Link**：通过 `smart-flower-pot://connect?mode=ble&mac=XX:XX:XX:XX:XX:XX` 启动并自动连接
+- **跨平台**：一套代码适配所有平台
+
+#### 构建发布版本
+
+```bash
+cd desktop
+bun run tauri build
+```
+
+也可通过 GitHub Actions 手动触发构建（`.github/workflows/build-tauri.yml`），构建产物自动上传到 GitHub Release（预发布）。
+
+### 4. 使用说明
 
 - **传感器仪表盘**：2×2 卡片布局，实时显示温度、空气湿度、土壤 ADC 值、水泵状态，带左侧彩色边框和图标和 staggered 入场动画
 - **灌溉设置**：分组表单（温度区间 / 湿度区间 / 土壤阈值 / 水泵控制），数字输入 + 下拉选择，保存按钮将设置写入 ESP32 并持久化存储
@@ -200,11 +253,13 @@ Web 前端为纯静态 SPA（无服务端渲染），采用 **Service Worker Cac
 |------|------|
 | 固件 | Arduino (ESP32-C6), BLE, Preferences/NVS, DHT |
 | 通信 | Bluetooth Low Energy 5.0 (128-bit UUID) / USB Serial (115200bps) |
-| 前端框架 | Vue 3.5.34 (Composition API) + Vite 8.0 |
+| Web 前端 | Vue 3.5.34 (Composition API) + Vite 8.0 |
+| Tauri 客户端 | Tauri 2 + Vue 3 + Vite 8（全平台原生应用） |
 | UI 库 | Tailwind CSS 4.2（毛玻璃卡片 + CSS 变量主题 + 自定义动画） |
 | 主题系统 | CSS 自定义属性 + localStorage 持久化（浅色/深色/自动） |
 | PWA | Manifest + Service Worker（Cache-First 策略，15天 TTL + 离线降级） |
 | 浏览器 API | Web Bluetooth API / Web Serial API |
+| Tauri 插件 | blec (BLE) / serialplugin (串口) / deep-link (深度链接) / store (持久化) |
 
 
 ## 串口通信协议

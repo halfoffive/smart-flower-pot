@@ -1,0 +1,362 @@
+@import "tailwindcss";
+
+/* ═══════════════════════════════════════════
+   CSS 自定义属性 — 浅色 / 深色双主题
+   所有颜色通过 CSS 变量引用，实现一键切换
+   变量命名规则：--sfp-{类别}-{语义}
+   ═══════════════════════════════════════════ */
+
+:root,
+[data-theme="light"] {
+  --sfp-bg-page: 243 244 246;
+  --sfp-bg-gradient-from: 243 244 246;
+  --sfp-bg-gradient-to: 229 231 235;
+
+  --sfp-bg-card: 255 255 255;
+  --sfp-bg-card-alpha: 255 255 255;
+
+  --sfp-bg-input: 249 250 251;
+  --sfp-bg-hover: 229 231 235;
+
+  --sfp-border: 209 213 219;
+  --sfp-border-light: 229 231 235;
+  --sfp-border-card: 229 231 235;
+
+  --sfp-text-primary: 17 24 39;
+  --sfp-text-secondary: 75 85 99;
+  --sfp-text-muted: 107 114 128;
+  --sfp-text-on-accent: 255 255 255;
+
+  --sfp-accent: 16 185 129;
+  --sfp-accent-light: 52 211 153;
+  --sfp-accent-dark: 5 150 105;
+
+  --sfp-danger: 239 68 68;
+  --sfp-danger-light: 248 113 113;
+  --sfp-warning: 245 158 11;
+  --sfp-info: 59 130 246;
+
+  --sfp-shadow: 0 0 0;
+  --sfp-shadow-accent: 16 185 129;
+  --sfp-shadow-danger: 239 68 68;
+
+  --sfp-dot-inactive: 156 163 175;
+}
+
+[data-theme="dark"] {
+  --sfp-bg-page: 3 7 18;
+  --sfp-bg-gradient-from: 17 24 39;
+  --sfp-bg-gradient-to: 3 7 18;
+
+  --sfp-bg-card: 31 41 55;
+  --sfp-bg-card-alpha: 31 41 55;
+
+  --sfp-bg-input: 17 24 39;
+  --sfp-bg-hover: 55 65 81;
+
+  --sfp-border: 55 65 81;
+  --sfp-border-light: 75 85 99;
+  --sfp-border-card: 55 65 81;
+
+  --sfp-text-primary: 243 244 246;
+  --sfp-text-secondary: 156 163 175;
+  --sfp-text-muted: 107 114 128;
+  --sfp-text-on-accent: 255 255 255;
+
+  --sfp-accent: 16 185 129;
+  --sfp-accent-light: 52 211 153;
+  --sfp-accent-dark: 5 150 105;
+
+  --sfp-danger: 239 68 68;
+  --sfp-danger-light: 248 113 113;
+  --sfp-warning: 245 158 11;
+  --sfp-info: 59 130 246;
+
+  --sfp-shadow: 0 0 0;
+  --sfp-shadow-accent: 16 185 129;
+  --sfp-shadow-danger: 239 68 68;
+
+  --sfp-dot-inactive: 75 85 99;
+}
+
+/* ═══════════════════════════════════════════
+   页面基础样式
+   ═══════════════════════════════════════════ */
+
+body {
+  font-family: 'Noto Sans SC', system-ui, -apple-system, sans-serif;
+  background: linear-gradient(
+    to bottom,
+    rgb(var(--sfp-bg-gradient-from)),
+    rgb(var(--sfp-bg-gradient-from)),
+    rgb(var(--sfp-bg-gradient-to))
+  );
+  color: rgb(var(--sfp-text-primary));
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+html {
+  transition: background-color 300ms ease;
+}
+
+/* ═══════════════════════════════════════════
+   自定义动画（Tailwind 4 @theme 扩展）
+   ═══════════════════════════════════════════ */
+
+@theme {
+  --animate-pulse-dot: pulse-dot 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  --animate-slide-up: slide-up 300ms ease-out;
+  --animate-fade-in: fade-in 300ms ease-out;
+  --animate-card-in: card-in 400ms ease-out both;
+  --animate-card-hover: card-hover 200ms ease-out;
+
+  @keyframes pulse-dot {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(0.75); }
+  }
+
+  @keyframes slide-up {
+    from { opacity: 0; transform: translateY(12px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes fade-in {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+  }
+
+  @keyframes card-in {
+    from { opacity: 0; transform: translateY(16px) scale(0.97); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+  }
+
+  @keyframes card-hover {
+    from { transform: scale(1); }
+    to   { transform: scale(1.01); }
+  }
+}
+
+/* ═══════════════════════════════════════════
+   性能提示
+   ═══════════════════════════════════════════ */
+
+.animate-card-in {
+  will-change: transform, opacity;
+}
+
+.animate-pulse-dot {
+  will-change: transform, opacity;
+}
+
+/* ═══════════════════════════════════════════
+   通用卡片
+   ═══════════════════════════════════════════ */
+
+.sfp-card {
+  background: rgb(var(--sfp-bg-card-alpha) / 0.7);
+  border: 1px solid rgb(var(--sfp-border-card) / 0.5);
+  transition: transform 200ms ease, box-shadow 200ms ease, border-color 200ms ease;
+}
+
+.sfp-card:hover {
+  transform: translateY(-2px) scale(1.01);
+  box-shadow: 0 8px 30px rgb(var(--sfp-shadow) / 0.15);
+  border-color: rgb(var(--sfp-accent) / 0.4);
+}
+
+.sfp-input {
+  background: rgb(var(--sfp-bg-input));
+  border: 1px solid rgb(var(--sfp-border));
+  color: rgb(var(--sfp-text-primary));
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+
+.sfp-input:focus {
+  border-color: rgb(var(--sfp-accent));
+  box-shadow: 0 0 0 3px rgb(var(--sfp-accent) / 0.15);
+  outline: none;
+}
+
+/* ═══════════════════════════════════════════
+   主题切换按钮
+   ═══════════════════════════════════════════ */
+
+.theme-toggle-btn {
+  background: rgb(var(--sfp-bg-hover) / 0.5);
+  border: 1px solid rgb(var(--sfp-border) / 0.3);
+  color: rgb(var(--sfp-text-secondary));
+  transition: background 150ms ease, transform 150ms ease, color 150ms ease;
+  cursor: pointer;
+  white-space: nowrap;
+  user-select: none;
+}
+
+.theme-toggle-btn:hover {
+  background: rgb(var(--sfp-bg-hover) / 0.8);
+  color: rgb(var(--sfp-text-primary));
+  transform: scale(1.05);
+}
+
+.theme-toggle-btn:active {
+  transform: scale(0.95);
+}
+
+/* ═══════════════════════════════════════════
+   下拉框
+   ═══════════════════════════════════════════ */
+
+.sfp-select {
+  background: rgb(var(--sfp-bg-input));
+  border: 1px solid rgb(var(--sfp-border));
+  color: rgb(var(--sfp-text-primary));
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+
+.sfp-select:focus {
+  border-color: rgb(var(--sfp-accent));
+  box-shadow: 0 0 0 3px rgb(var(--sfp-accent) / 0.15);
+  outline: none;
+}
+
+/* ═══════════════════════════════════════════
+   传感器卡片
+   ═══════════════════════════════════════════ */
+
+.sfp-sensor-card {
+  background: rgb(var(--sfp-bg-card-alpha) / 0.7);
+  transition: transform 200ms ease, box-shadow 200ms ease;
+}
+
+.sfp-sensor-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgb(var(--sfp-shadow) / 0.12);
+}
+
+/* ═══════════════════════════════════════════
+   渐变按钮
+   ═══════════════════════════════════════════ */
+
+.sfp-btn-primary {
+  background: linear-gradient(
+    to right,
+    rgb(var(--sfp-accent)),
+    rgb(var(--sfp-accent-dark))
+  );
+  color: rgb(var(--sfp-text-on-accent));
+  box-shadow: 0 4px 15px rgb(var(--sfp-shadow-accent) / 0.2);
+  transition: all 200ms ease;
+}
+
+.sfp-btn-primary:hover {
+  background: linear-gradient(
+    to right,
+    rgb(var(--sfp-accent-dark)),
+    rgb(var(--sfp-accent-dark))
+  );
+  box-shadow: 0 6px 20px rgb(var(--sfp-shadow-accent) / 0.3);
+}
+
+.sfp-btn-primary:active {
+  transform: scale(0.98);
+}
+
+.sfp-btn-danger {
+  background: linear-gradient(
+    to right,
+    rgb(var(--sfp-danger)),
+    rgb(var(--sfp-danger-light))
+  );
+  color: rgb(var(--sfp-text-on-accent));
+  box-shadow: 0 4px 15px rgb(var(--sfp-shadow-danger) / 0.2);
+  transition: all 200ms ease;
+}
+
+.sfp-btn-danger:hover {
+  box-shadow: 0 6px 20px rgb(var(--sfp-shadow-danger) / 0.3);
+}
+
+.sfp-btn-danger:active {
+  transform: scale(0.98);
+}
+
+/* ═══════════════════════════════════════════
+   仪表盘数值颜色
+   ═══════════════════════════════════════════ */
+
+.sfp-val-temp  { color: #fb923c; }
+.sfp-val-hum   { color: #60a5fa; }
+.sfp-val-soil  { color: #fbbf24; }
+.sfp-val-pump-active { color: #34d399; }
+.sfp-val-pump-idle   { color: rgb(var(--sfp-text-muted)); }
+
+.sfp-border-l-temp   { border-left: 4px solid #fb923c; }
+.sfp-border-l-hum    { border-left: 4px solid #60a5fa; }
+.sfp-border-l-soil   { border-left: 4px solid #fbbf24; }
+.sfp-border-l-pump   { border-left: 4px solid rgb(var(--sfp-accent-light)); }
+.sfp-border-l-pump-idle { border-left: 4px solid rgb(var(--sfp-border)); }
+
+/* ═══════════════════════════════════════════
+   响应式
+   ═══════════════════════════════════════════ */
+
+@media (hover: none) {
+  .sfp-card:hover,
+  .sfp-sensor-card:hover {
+    transform: none;
+  }
+}
+
+/* ═══════════════════════════════════════════
+   进度条（indeterminate 动画）
+   ═══════════════════════════════════════════ */
+
+.sfp-progress {
+  position: relative;
+  width: 100%;
+  height: 4px;
+  border-radius: 2px;
+  background: rgb(var(--sfp-border) / 0.3);
+  overflow: hidden;
+  margin-top: 12px;
+}
+
+.sfp-progress::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -40%;
+  width: 40%;
+  height: 100%;
+  border-radius: 2px;
+  background: linear-gradient(
+    to right,
+    rgb(var(--sfp-accent)),
+    rgb(var(--sfp-accent-light))
+  );
+  animation: sfp-progress-slide 1.5s ease-in-out infinite;
+}
+
+@keyframes sfp-progress-slide {
+  0%   { left: -40%; }
+  100% { left: 100%; }
+}
+
+/* ═══════════════════════════════════════════
+   加载旋转器
+   ═══════════════════════════════════════════ */
+
+.sfp-spinner {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgb(var(--sfp-text-on-accent) / 0.3);
+  border-top-color: rgb(var(--sfp-text-on-accent));
+  border-radius: 50%;
+  animation: sfp-spin 600ms linear infinite;
+}
+
+@keyframes sfp-spin {
+  to { transform: rotate(360deg); }
+}

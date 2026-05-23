@@ -2,9 +2,10 @@
 
 ## Project overview
 
-Two independent packages — no shared build, no monorepo tooling:
+Three independent packages — no shared build, no monorepo tooling:
 
 - **`web/`** — Vue 3.5.34 + Vite 8 + Tailwind CSS 4 frontend (single-page SPA)
+- **`desktop/`** — Tauri 2 + Vue 3 + Vite 8 desktop/mobile client (Windows/macOS/Linux/Android/iOS)
 - **`esp32-c6/`** — Arduino IDE firmware for ESP32-C6 (C++, BLE, NVS)
 
 ## Commands
@@ -20,6 +21,12 @@ bun run preview
 # 注：Cloudflare Pages 使用默认 base=/，GitHub Pages 使用 --base=/repo-name/
 # GitHub Pages 构建（测试用）：
 bun run build -- --base=/smart-flower-pot/
+
+# Tauri 客户端开发
+cd desktop && bun install && bun run tauri dev
+
+# Tauri 客户端构建
+bun run tauri build
 ```
 
 No test, lint, or typecheck scripts exist.
@@ -146,3 +153,52 @@ Binary framed protocol over USB Serial (115200 baud). Frame format: `0xAA 0x55` 
 - There is no CI, no pre-commit hooks, and no automated testing of any kind.
 - **waterDirection = 0xFF** is a legacy protocol control flag, not an actual direction. The current Web UI sends actual direction values (0 or 1). The firmware only triggers the pump when speed changes from 0 to non-zero, so saving direction changes won't accidentally start the pump. The 0xFF flag is retained for backward compatibility.
 - **Connection vs data reading are separated**: `useConnection.js` sets `connected = true` immediately after the transport-level connection succeeds. `readSettings()` and `readDeviceInfo()` failures are non-fatal — they log warnings but don't tear down the connection or show error alerts.
+
+### Desktop (Tauri 2 Client)
+
+**Entry flow**: `index.html` → `src/main.js` (createApp) → `src/App.vue` (根组件)
+
+**Module architecture**:
+- `src/lib/` — 纯函数库 + Tauri 插件适配层
+  - `tauri-ble.js` — tauri-plugin-blec 适配（扫描/连接/读写/订阅，base64 编解码）
+  - `tauri-serial.js` — tauri-plugin-serialplugin 适配（串口列表/连接/帧协议，hex 编解码）
+  - `settings.js` — 设置序列化/反序列化（与 Web 端共享，纯函数）
+- `src/composables/` — Vue 组合式函数
+  - `useConnection.js` — 连接管理（Tauri 插件 + Store 持久化 + Deep Link 自动连接）
+  - `useTheme.js` — 主题管理（与 Web 端共享）
+  - `useToast.js` — 提示框（与 Web 端共享）
+- `src/components/` — Vue 组件
+  - `ConnectPanel.vue` — 连接方式选择（应用内设备/串口列表选择 UI）
+  - 其余组件与 Web 端共享
+
+**Tauri plugins** (registered in `src-tauri/src/lib.rs`):
+- `tauri-plugin-blec` — BLE 蓝牙客户端（基于 btleplug，全平台）
+- `tauri-plugin-serialplugin` — 串口通信（跨平台）
+- `tauri-plugin-deep-link` — 深度链接（URL Scheme 启动应用）
+- `tauri-plugin-store` — 持久化键值存储（保存上次连接信息）
+- `tauri-plugin-opener` — 外部链接打开
+
+**Deep Link**:
+- 桌面 URL Scheme: `smart-flower-pot://connect?mode=ble&mac=XX:XX:XX:XX:XX:XX`
+- 移动端: Universal Links (iOS) / App Links (Android)，需配置 `.well-known/` 服务器文件
+- 前端通过 `onOpenUrl()` 监听，解析 URL 参数后触发 `autoConnectFromUrl()`
+
+**Auto-reconnect**:
+- 使用 `tauri-plugin-store` 持久化 `{ mode, address/path }` 到 `connection-store.json`
+- 应用启动时 `autoReconnect()` 从 Store 读取上次连接信息并尝试自动连接
+- 连接成功后调用 `saveLastConnection()` 保存当前连接信息
+
+**Capabilities** (`src-tauri/capabilities/default.json`):
+- `core:default`, `core:event:default` — 核心权限
+- `blec:default` — BLE 插件权限
+- `serialplugin:default` — 串口插件权限
+- `deep-link:default` — 深度链接权限
+- `store:default` — 存储插件权限
+- `opener:default` — 打开器权限
+
+**GitHub Actions** (`.github/workflows/build-tauri.yml`):
+- 手动触发 `workflow_dispatch`
+- 构建矩阵：macOS (Arm + Intel)、Ubuntu、Windows、Android APK、iOS
+- 使用 `tauri-apps/tauri-action@v0`
+- 发布到 GitHub Release（预发布，非草稿）
+- Android 签名需要 GitHub Secrets: `ANDROID_KEY_ALIAS`, `ANDROID_KEY_BASE64`, `ANDROID_KEY_PASSWORD`

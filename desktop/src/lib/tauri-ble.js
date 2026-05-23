@@ -34,6 +34,9 @@ const SETTINGS_CHAR_UUID = '12345678-1234-1234-1234-123456789abd'
 const SENSOR_CHAR_UUID   = '12345678-1234-1234-1234-123456789abe'
 const DEVICE_INFO_UUID   = '12345678-1234-1234-1234-123456789abf'
 
+const DEVICE_NAME_KEYWORDS = ['智能花盆', 'SmartFlowerPot', 'SFP']
+const SERVICE_UUID_LOWER = SERVICE_UUID.toLowerCase()
+
 const MAX_RECONNECT     = 5
 const RECONNECT_DELAY   = 2000
 
@@ -64,14 +67,43 @@ const arrayBufferToNumbers = (buffer) => {
 }
 
 /**
- * 扫描 BLE 设备
- * startScan 通过 Channel 异步推送设备，invoke 在超时后返回
- * 返回设备列表 [{name, address, rssi, ...}]
- * @param {number} [timeoutMs=5000] - 扫描持续时间
- * @returns {Promise<Array>}
+ * 判断设备是否为本项目智能花盆
+ * 匹配规则（满足任一即可）：
+ * 1. 设备的 services 列表包含本项目的 Service UUID
+ * 2. 设备名称包含关键词（智能花盆 / SmartFlowerPot / SFP）
+ *
+ * @param {{ name: string, services: string[], address: string }} device
+ * @returns {boolean}
  */
-export async function scanDevices(timeoutMs = 5000) {
-  const allDevices = []
+const isFlowerPotDevice = (device) => {
+  if (device.services && device.services.length > 0) {
+    const hasService = device.services.some(
+      (s) => s.toLowerCase() === SERVICE_UUID_LOWER
+    )
+    if (hasService) return true
+  }
+
+  if (device.name) {
+    const nameLower = device.name.toLowerCase()
+    if (DEVICE_NAME_KEYWORDS.some((kw) => nameLower.includes(kw.toLowerCase()))) {
+      return true
+    }
+  }
+
+  return false
+}
+
+/**
+ * 开始扫描 BLE 设备（流式回调，仅返回智能花盆设备）
+ *
+ * 关键：startScan 的 invoke 立即返回，扫描在 Rust 后台持续 timeoutMs 毫秒
+ * 设备通过 Channel 异步推送，onDevice 回调在扫描过程中实时触发
+ * 调用方无需等待扫描结束，设备发现后立即可见
+ *
+ * @param {function} onDevice - 发现新设备时的回调 (device: BleDevice) => void
+ * @param {number} [timeoutMs=10000] - 扫描持续时间
+ */
+export async function scanDevices(onDevice, timeoutMs = 10000) {
   const seen = new Set()
 
   try {
@@ -79,7 +111,7 @@ export async function scanDevices(timeoutMs = 5000) {
     console.log('[BLE/Tauri] 蓝牙适配器状态:', adapterState)
     if (adapterState === 'Off') {
       console.warn('[BLE/Tauri] 蓝牙适配器已关闭')
-      return allDevices
+      return
     }
   } catch (e) {
     console.warn('[BLE/Tauri] 获取适配器状态失败（Windows 上可忽略）:', e)
@@ -95,25 +127,98 @@ export async function scanDevices(timeoutMs = 5000) {
   try {
     console.log('[BLE/Tauri] 开始扫描，超时:', timeoutMs, 'ms')
     await startScan((devices) => {
-      console.log('[BLE/Tauri] 扫描到设备:', devices.length, '个')
+      console.log('[BLE/Tauri] 扫描回调触发，收到设备:', devices.length, '个')
       for (const device of devices) {
-        if (!seen.has(device.address)) {
-          seen.add(device.address)
-          allDevices.push(device)
-          console.log('[BLE/Tauri] 发现设备:', device.name || '未知', device.address)
+        if (seen.has(device.address)) continue
+        seen.add(device.address)
+
+        if (!isFlowerPotDevice(device)) {
+          console.log('[BLE/Tauri] 过滤无关设备:', device.name || '未知', device.address)
+          continue
+        }
+
+        console.log('[BLE/Tauri] 发现花盆设备:', device.name || '未知', device.address)
+        onDevice(device)
+      }
+    }, timeoutMs)
+    console.log('[BLE/Tauri] startScan 已返回（扫描在后台继续）')
+  } catch (e) {
+    console.error('[BLE/Tauri] 扫描启动异常:', e)
+    throw e
+  }
+}
+
+/**
+ * 停止 BLE 扫描
+ */
+export async function stopScanDevices() {
+  try {
+    await stopScan()
+    console.log('[BLE/Tauri] 扫描已停止')
+  } catch (e) {
+    console.warn('[BLE/Tauri] 停止扫描失败:', e)
+  }
+}
+
+/**
+ * 扫描并自动连接指定地址的 BLE 设备
+ *
+ * btleplug 要求先扫描发现设备后才能连接，启动时直接 connect 必定失败
+ * 本函数先扫描，发现目标地址后立即停止扫描并连接
+ *
+ * @param {string} address - 目标设备地址
+ * @param {function} onSensorData - 传感器数据回调
+ * @param {function} onDisconnect - 断开连接回调
+ * @param {number} [timeoutMs=10000] - 扫描超时
+ * @returns {Promise<boolean>} 连接是否成功
+ */
+export async function scanAndConnect(address, onSensorData, onDisconnect, timeoutMs = 10000) {
+  console.log('[BLE/Tauri] 扫描并连接:', address, '超时:', timeoutMs, 'ms')
+
+  try {
+    const adapterState = await getAdapterState()
+    if (adapterState === 'Off') {
+      console.warn('[BLE/Tauri] 蓝牙适配器已关闭，无法自动重连')
+      return false
+    }
+  } catch (_) { /* Windows 上可忽略 */ }
+
+  try {
+    await checkPermissions(true)
+  } catch (_) { /* Windows 上可忽略 */ }
+
+  let found = false
+
+  try {
+    await startScan((devices) => {
+      for (const device of devices) {
+        if (device.address === address) {
+          console.log('[BLE/Tauri] 扫描到目标设备:', device.name || '未知', address)
+          found = true
+          return
         }
       }
     }, timeoutMs)
-    console.log('[BLE/Tauri] 扫描结束，共发现:', allDevices.length, '个设备')
   } catch (e) {
     console.error('[BLE/Tauri] 扫描异常:', e)
+    return false
   }
 
-  try {
-    await stopScan()
-  } catch (_) { /* 忽略 */ }
+  if (!found) {
+    console.warn('[BLE/Tauri] 扫描超时，未发现目标设备:', address)
+    try { await stopScan() } catch (_) { /* 忽略 */ }
+    return false
+  }
 
-  return allDevices
+  try { await stopScan() } catch (_) { /* 忽略 */ }
+
+  try {
+    await connect(address, onSensorData, onDisconnect)
+    return true
+  } catch (e) {
+    console.error('[BLE/Tauri] 扫描到设备但连接失败:', e)
+    return false
+  }
 }
 
 /**

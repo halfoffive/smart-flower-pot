@@ -26,7 +26,9 @@
 - **持久化存储**：设置保存在 ESP32 NVS 闪存中，断电不丢失
 - **能效优化**：空闲时长周期检测（2秒），灌溉/手动时高频检测（200毫秒），前端传感器更新 RAF 节流
 - **安全保护**：最长灌溉 5 秒超时，防止水泵空转；H桥方向切换带死区保护
-- **自动重连**：Web 端蓝牙断开后自动尝试重连（最多 5 次）
+- **自动重连**：关闭应用后重新打开，BLE 自动扫描并连接上次设备，串口直接重连
+- **BLE 设备过滤**：扫描时自动过滤无关蓝牙设备，仅显示智能花盆（按 Service UUID 和设备名称匹配）
+- **BLE 快速重连**：点击蓝牙连接时优先尝试连接上次设备，失败后回退到扫描模式
 - **双模通信**：BLE 与 Serial 可同时工作，传感器数据同时推送至两种连接
 - **设备信息面板**：BLE 和串口连接后均显示 MAC 地址、芯片型号、芯片修订版、Flash 大小、固件版本、串口 USB VID/PID
 - **URL 自动连接**：BLE 模式 `?mode=ble&mac=XX:XX:XX:XX:XX:XX` 自动连接已配对设备；若浏览器不支持自动连接 API 或无已配对设备，自动弹出手动蓝牙选择框；加 `&pick=1` 直接弹出设备选择框（跳过自动连接）；串口模式 `?mode=serial&vid=0x10c4&pid=0xea60` 按 USB 标识匹配（无需用户手势）
@@ -75,7 +77,6 @@ smart-flower-pot/
 │   ├── package.json
 │   ├── vite.config.js
 │   ├── public/
-│   │   └── potted_plant_3d.png      # 应用图标
 │   ├── src/
 │   │   ├── App.vue                  # 根组件（deep-link + 自动重连）
 │   │   ├── main.js                  # Vue 3 应用入口（无 Service Worker）
@@ -150,9 +151,10 @@ bun run tauri dev
 ```
 
 #### 功能特性
-- **原生 BLE 连接**：基于 btleplug，应用内扫描设备并选择连接
+- **原生 BLE 连接**：基于 btleplug，应用内扫描设备并选择连接，自动过滤无关设备
 - **原生串口连接**：应用内列出可用串口并选择连接
-- **自动重连**：关闭应用后重新打开，自动连接上次设备
+- **自动重连**：启动时自动扫描并连接上次 BLE 设备，串口直接重连
+- **BLE 快速重连**：点击蓝牙连接时优先连接上次设备，失败后回退扫描
 - **Deep Link**：通过 `smart-flower-pot://connect?mode=ble&mac=XX:XX:XX:XX:XX:XX` 启动并自动连接
 - **跨平台**：一套代码适配所有平台
 
@@ -259,7 +261,7 @@ Web 前端为纯静态 SPA（无服务端渲染），采用 **Service Worker Cac
 | 主题系统 | CSS 自定义属性 + localStorage 持久化（浅色/深色/自动） |
 | PWA | Manifest + Service Worker（Cache-First 策略，15天 TTL + 离线降级） |
 | 浏览器 API | Web Bluetooth API / Web Serial API |
-| Tauri 插件 | blec (BLE) / serialplugin (串口) / deep-link (深度链接) / store (持久化) |
+| Tauri 插件 | blec (BLE, 含 scanAndConnect 自动重连) / serialplugin (串口) / deep-link (深度链接) / store (持久化) |
 
 
 ## 串口通信协议

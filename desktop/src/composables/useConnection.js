@@ -44,6 +44,7 @@ const settings = ref({ ...DEFAULT_SETTINGS })
 const deviceInfo = ref(null)
 const connecting = ref(false)
 const saving = ref(false)
+const lastConnection = ref(null)
 
 let storeInstance = null
 
@@ -263,34 +264,44 @@ export function useConnection(showAlert, showToast) {
 
   /**
    * 应用启动时自动重连上次设备
-   * 从 Store 读取上次连接信息，尝试自动连接
+   * BLE：先扫描发现设备再连接（btleplug 要求先扫描）
+   * Serial：直接连接（串口不需要扫描）
    */
   async function autoReconnect() {
     const last = await loadLastConnection()
     if (!last) return
 
+    lastConnection.value = last
     console.log('[自动重连] 尝试重连上次设备:', last)
 
     connecting.value = true
     try {
       if (last.mode === 'ble' && last.address) {
-        await ble.connect(last.address, onSensorData, onDisconnect)
-        connected.value = true
-        connectionMode.value = 'ble'
-        await readDeviceData(ble)
-        console.log('[自动重连] BLE 重连成功:', last.address)
+        const ok = await ble.scanAndConnect(last.address, onSensorData, onDisconnect)
+        if (ok) {
+          connected.value = true
+          connectionMode.value = 'ble'
+          connecting.value = false
+          readDeviceData(ble).then(() => {
+            console.log('[自动重连] BLE 重连成功:', last.address)
+          })
+        } else {
+          console.warn('[自动重连] BLE 自动重连失败（未扫描到设备）')
+          connecting.value = false
+        }
       } else if (last.mode === 'serial' && last.path) {
         await serial.connect(last.path, onSensorData, onDisconnect)
         connected.value = true
         connectionMode.value = 'serial'
-        await readDeviceData(serial)
-        console.log('[自动重连] 串口重连成功:', last.path)
+        connecting.value = false
+        readDeviceData(serial).then(() => {
+          console.log('[自动重连] 串口重连成功:', last.path)
+        })
       }
     } catch (e) {
       console.warn('[自动重连] 自动重连失败:', e)
       connected.value = false
       connectionMode.value = null
-    } finally {
       connecting.value = false
     }
   }
@@ -348,6 +359,41 @@ export function useConnection(showAlert, showToast) {
     }
   }
 
+  /**
+   * 尝试快速重连上次 BLE 设备
+   * 供 ConnectPanel 在用户点击"蓝牙连接"时优先调用
+   * 使用 scanAndConnect 先扫描再连接，成功返回 true，失败返回 false
+   *
+   * @returns {Promise<boolean>}
+   */
+  async function tryQuickBleConnect() {
+    const last = lastConnection.value || await loadLastConnection()
+    if (!last || last.mode !== 'ble' || !last.address) return false
+
+    console.log('[快速重连] 尝试连接上次 BLE 设备:', last.address)
+    connecting.value = true
+
+    const ok = await ble.scanAndConnect(last.address, onSensorData, onDisconnect)
+    if (ok) {
+      connected.value = true
+      connectionMode.value = 'ble'
+      connecting.value = false
+
+      readDeviceData(ble).then(() => {
+        saveLastConnection({ mode: 'ble', address: last.address })
+        console.log('[快速重连] BLE 连接成功:', last.address)
+      }).catch(() => {
+        saveLastConnection({ mode: 'ble', address: last.address })
+      })
+
+      return true
+    }
+
+    console.warn('[快速重连] 快速重连失败，将回退到扫描模式')
+    connecting.value = false
+    return false
+  }
+
   return {
     connected: readonly(connected),
     connectionMode: readonly(connectionMode),
@@ -356,6 +402,7 @@ export function useConnection(showAlert, showToast) {
     deviceInfo: readonly(deviceInfo),
     connecting: readonly(connecting),
     saving: readonly(saving),
+    lastConnection: readonly(lastConnection),
 
     connectBle,
     connectSerial,
@@ -365,5 +412,6 @@ export function useConnection(showAlert, showToast) {
     autoReconnect,
     autoConnectFromUrl,
     setupDeepLink,
+    tryQuickBleConnect,
   }
 }

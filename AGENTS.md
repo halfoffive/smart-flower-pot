@@ -153,6 +153,8 @@ Binary framed protocol over USB Serial (115200 baud). Frame format: `0xAA 0x55` 
 - There is no CI, no pre-commit hooks, and no automated testing of any kind.
 - **waterDirection = 0xFF** is a legacy protocol control flag, not an actual direction. The current Web UI sends actual direction values (0 or 1). The firmware only triggers the pump when speed changes from 0 to non-zero, so saving direction changes won't accidentally start the pump. The 0xFF flag is retained for backward compatibility.
 - **Connection vs data reading are separated**: `useConnection.js` sets `connected = true` immediately after the transport-level connection succeeds. `readSettings()` and `readDeviceInfo()` failures are non-fatal — they log warnings but don't tear down the connection or show error alerts.
+- **BLE auto-reconnect requires scanning**: btleplug requires devices to be discovered via scanning before connecting. `autoReconnect()` and `tryQuickBleConnect()` both use `scanAndConnect()` which scans first, then connects. Direct `connect(address)` without prior scanning will fail.
+- **BLE scan is stream-based**: `startScan` from `@mnlphlp/plugin-blec` returns immediately — the Rust backend spawns a tokio task that scans in 200ms intervals and pushes devices via Tauri Channel. The `scanDevices()` function uses a callback pattern (`onDevice`) rather than returning an array, because the array would always be empty at the time `startScan` resolves.
 
 ### Desktop (Tauri 2 Client)
 
@@ -160,15 +162,15 @@ Binary framed protocol over USB Serial (115200 baud). Frame format: `0xAA 0x55` 
 
 **Module architecture**:
 - `src/lib/` — 纯函数库 + Tauri 插件适配层
-  - `tauri-ble.js` — tauri-plugin-blec 适配（扫描/连接/读写/订阅，base64 编解码）
+  - `tauri-ble.js` — tauri-plugin-blec 适配（流式扫描/设备过滤/scanAndConnect 自动重连/连接/读写/订阅，number[] ↔ ArrayBuffer 互转）
   - `tauri-serial.js` — tauri-plugin-serialplugin 适配（串口列表/连接/帧协议，hex 编解码）
   - `settings.js` — 设置序列化/反序列化（与 Web 端共享，纯函数）
 - `src/composables/` — Vue 组合式函数
-  - `useConnection.js` — 连接管理（Tauri 插件 + Store 持久化 + Deep Link 自动连接）
+  - `useConnection.js` — 连接管理（Tauri 插件 + Store 持久化 + BLE scanAndConnect 自动重连 + Deep Link 自动连接 + 快速重连）
   - `useTheme.js` — 主题管理（与 Web 端共享）
   - `useToast.js` — 提示框（与 Web 端共享）
 - `src/components/` — Vue 组件
-  - `ConnectPanel.vue` — 连接方式选择（应用内设备/串口列表选择 UI）
+  - `ConnectPanel.vue` — 连接方式选择（BLE 快速重连优先 + 应用内设备/串口列表选择 UI + 实时扫描流式显示）
   - 其余组件与 Web 端共享
 
 **Tauri plugins** (registered in `src-tauri/src/lib.rs`):
@@ -186,7 +188,17 @@ Binary framed protocol over USB Serial (115200 baud). Frame format: `0xAA 0x55` 
 **Auto-reconnect**:
 - 使用 `tauri-plugin-store` 持久化 `{ mode, address/path }` 到 `connection-store.json`
 - 应用启动时 `autoReconnect()` 从 Store 读取上次连接信息并尝试自动连接
+- BLE 自动重连使用 `scanAndConnect()`：先扫描发现目标设备再连接（btleplug 要求先扫描后连接，直接 connect 必定失败）
+- 串口自动重连直接调用 `connect()`（串口不需要扫描）
 - 连接成功后调用 `saveLastConnection()` 保存当前连接信息
+- 点击蓝牙连接按钮时 `tryQuickBleConnect()` 优先尝试快速重连上次 BLE 设备，失败后回退到扫描模式
+
+**BLE scanning and filtering**:
+- `scanDevices(onDevice, timeoutMs)` — 流式回调模式，设备发现后立即推送到 UI（`startScan` 的 invoke 立即返回，扫描在 Rust 后台持续运行）
+- `scanAndConnect(address, onSensorData, onDisconnect, timeoutMs)` — 扫描并自动连接指定地址设备，供自动重连使用
+- `isFlowerPotDevice(device)` — 过滤无关蓝牙设备，匹配规则：设备 services 包含项目 Service UUID 或设备名称包含关键词（智能花盆/SmartFlowerPot/SFP）
+- `stopScanDevices()` — 停止 BLE 扫描
+- 扫描超时默认 10 秒，ConnectPanel 中 10.5 秒后自动设置 scanning=false
 
 **Capabilities** (`src-tauri/capabilities/default.json`):
 - `core:default`, `core:event:default` — 核心权限

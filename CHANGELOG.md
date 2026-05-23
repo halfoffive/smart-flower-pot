@@ -1,5 +1,32 @@
 # 更新日志
 
+## [4.1.0] — 2026-05-23
+
+### 新增
+- **BLE 流式扫描**：`scanDevices()` 改为流式回调模式，设备发现后立即推送到 UI，不再等扫描结束后返回空列表
+  - `startScan` 的 invoke 立即返回，扫描在 Rust 后台持续运行，设备通过 Channel 实时推送
+  - 新增 `stopScanDevices()` 主动停止扫描
+  - 扫描超时从 5 秒增加到 10 秒
+- **BLE 设备过滤**：`isFlowerPotDevice()` 纯函数过滤无关蓝牙设备，仅显示智能花盆
+  - 匹配规则：设备 services 包含项目 Service UUID 或设备名称包含关键词（智能花盆/SmartFlowerPot/SFP）
+- **BLE scanAndConnect 自动重连**：`scanAndConnect()` 先扫描发现目标设备再连接
+  - btleplug 要求先扫描后连接，启动时直接 `connect(address)` 必定失败
+  - `autoReconnect()` 和 `tryQuickBleConnect()` 均使用 `scanAndConnect()` 替代直接连接
+- **BLE 快速重连**：点击蓝牙连接按钮时优先尝试连接上次 BLE 设备，失败后回退到扫描模式
+- **扫描加载动画**：蓝牙扫描时显示大号旋转动画和提示文本
+- **应用图标更新**：使用 `tauri icon` 命令从 `web/public/icon.svg` 重新生成全套 Tauri 图标（PNG/ICO/ICNS/iOS/Android）
+
+### 修复
+- **BLE 扫描不到设备**：根本原因是 `startScan` 的 invoke 立即返回，但旧代码等扫描结束后才读取设备列表，此时列表始终为空。改为流式回调模式后设备实时推送到 UI
+- **BLE 自动重连失败**：btleplug 要求先扫描发现设备后才能连接，旧代码直接 `connect(address)` 在启动时必定失败。改用 `scanAndConnect()` 先扫描再连接
+- **串口连接后卡在等待界面**：`readDeviceData` 阻塞 UI，改为连接成功后立即解除 connecting 状态，数据读取异步执行
+
+### 变更
+- `desktop/src/lib/tauri-ble.js` — 重构扫描为流式回调 + 新增 `scanAndConnect()`/`stopScanDevices()`/`isFlowerPotDevice()` + 超时增加到 10 秒
+- `desktop/src/composables/useConnection.js` — `autoReconnect()`/`tryQuickBleConnect()` 改用 `scanAndConnect()` + 新增 `lastConnection` ref + 连接后立即解除 connecting 状态
+- `desktop/src/components/ConnectPanel.vue` — 流式显示扫描结果 + 快速重连优先 + 扫描加载动画 + 可随时停止扫描
+- `desktop/src-tauri/icons/` — 从 SVG 源文件重新生成全套图标
+
 ## [4.0.0] — 2026-05-16
 
 ### 新增

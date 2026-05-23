@@ -11,7 +11,7 @@
 #
 # 所需 GitHub Secrets：
 # - ANDROID_KEY_ALIAS: Android 签名密钥别名
-# - ANDROID_KEY_BASE64: Android 签名密钥（base64 编码，单行无换行）
+# - ANDROID_KEY_BASE64: Android 签名密钥（base64 编码，支持 PEM 格式和纯 base64）
 # - ANDROID_KEY_PASSWORD: Android 签名密钥密码
 # ============================================================
 
@@ -57,7 +57,7 @@ jobs:
       - name: 安装 Bun
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: "1.2.14"
+          bun-version: "1.3.14"
 
       - name: 安装前端依赖
         run: bun install --cwd desktop
@@ -111,11 +111,12 @@ jobs:
 
       - name: 配置 Android 签名
         if: matrix.mobile == 'android'
+        shell: bash
         run: |
           cd desktop/src-tauri/gen/android
           echo "keyAlias=${{ secrets.ANDROID_KEY_ALIAS }}" > keystore.properties
           echo "password=${{ secrets.ANDROID_KEY_PASSWORD }}" >> keystore.properties
-          echo "${{ secrets.ANDROID_KEY_BASE64 }}" | tr -d '\n\r' | base64 -d > "$RUNNER_TEMP/keystore.jks"
+          printf '%s' "${{ secrets.ANDROID_KEY_BASE64 }}" | sed '/-----BEGIN/d; /-----END/d' | tr -d ' \t\n\r' | base64 -d > "$RUNNER_TEMP/keystore.jks"
           echo "storeFile=$RUNNER_TEMP/keystore.jks" >> keystore.properties
 
       - name: 注入 Android release 签名配置
@@ -125,6 +126,11 @@ jobs:
           sed -i '1s/^/import java.io.FileInputStream\n/' "$GRADLE_FILE"
           sed -i '/buildTypes {/i\    signingConfigs {\n        create("release") {\n            val keystorePropertiesFile = rootProject.file("keystore.properties")\n            val keystoreProperties = Properties()\n            if (keystorePropertiesFile.exists()) {\n                keystoreProperties.load(FileInputStream(keystorePropertiesFile))\n            }\n            keyAlias = keystoreProperties["keyAlias"] as String?\n            keyPassword = keystoreProperties["password"] as String?\n            storeFile = keystoreProperties["storeFile"]?.let { file(it as String) }\n            storePassword = keystoreProperties["password"] as String?\n        }\n    }\n' "$GRADLE_FILE"
           sed -i '/getByName("release") {/,/isMinifyEnabled/s/isMinifyEnabled = true/isMinifyEnabled = true\n            signingConfig = signingConfigs.getByName("release")/' "$GRADLE_FILE"
+
+      - name: 检查 Rust 编译（桌面端诊断）
+        if: matrix.mobile == ''
+        working-directory: desktop/src-tauri
+        run: cargo check 2>&1 || true
 
       - name: 构建 Tauri 应用并发布
         uses: tauri-apps/tauri-action@ca517bcbe58fd7012408d7ddfaeff950428bdeb1

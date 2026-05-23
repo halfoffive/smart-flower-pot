@@ -77,23 +77,19 @@ export async function scanDevices(timeoutMs = 5000) {
   try {
     const adapterState = await getAdapterState()
     console.log('[BLE/Tauri] 蓝牙适配器状态:', adapterState)
-    if (adapterState !== 'On') {
-      console.warn('[BLE/Tauri] 蓝牙适配器未开启，状态:', adapterState)
+    if (adapterState === 'Off') {
+      console.warn('[BLE/Tauri] 蓝牙适配器已关闭')
       return allDevices
     }
   } catch (e) {
-    console.warn('[BLE/Tauri] 获取适配器状态失败:', e)
+    console.warn('[BLE/Tauri] 获取适配器状态失败（Windows 上可忽略）:', e)
   }
 
   try {
     const granted = await checkPermissions(true)
     console.log('[BLE/Tauri] 权限检查结果:', granted)
-    if (!granted) {
-      console.warn('[BLE/Tauri] 蓝牙权限未授予，无法扫描')
-      return allDevices
-    }
   } catch (e) {
-    console.warn('[BLE/Tauri] 权限检查失败:', e)
+    console.warn('[BLE/Tauri] 权限检查失败（Windows 上可忽略）:', e)
   }
 
   try {

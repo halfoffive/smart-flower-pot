@@ -126,7 +126,12 @@ function goBack() {
         {{ scanning ? '扫描中...' : '🔍 扫描设备' }}
       </button>
 
-      <div v-if="bleDevices.length > 0" class="space-y-2 max-h-60 overflow-y-auto">
+      <div v-if="scanning" class="flex flex-col items-center justify-center py-6 space-y-3">
+        <div class="sfp-spinner-lg"></div>
+        <p class="text-sm text-[rgb(var(--sfp-text-muted))]">正在扫描附近蓝牙设备...</p>
+      </div>
+
+      <div v-else-if="bleDevices.length > 0" class="space-y-2 max-h-60 overflow-y-auto">
         <button
           v-for="device in bleDevices"
           :key="device.address"
@@ -139,7 +144,7 @@ function goBack() {
         </button>
       </div>
 
-      <p v-else-if="!scanning" class="text-xs text-[rgb(var(--sfp-text-muted))]">未发现附近蓝牙设备，点击上方按钮重新扫描</p>
+      <p v-else class="text-xs text-[rgb(var(--sfp-text-muted))]">未发现附近蓝牙设备，点击上方按钮重新扫描</p>
     </div>
 
     <!-- 串口选择 -->

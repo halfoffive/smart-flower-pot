@@ -357,6 +357,16 @@ html {
   animation: sfp-spin 600ms linear infinite;
 }
 
+.sfp-spinner-lg {
+  display: inline-block;
+  width: 36px;
+  height: 36px;
+  border: 3px solid rgb(var(--sfp-accent) / 0.2);
+  border-top-color: rgb(var(--sfp-accent));
+  border-radius: 50%;
+  animation: sfp-spin 800ms linear infinite;
+}
+
 @keyframes sfp-spin {
   to { transform: rotate(360deg); }
 }

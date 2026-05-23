@@ -18,7 +18,9 @@
 
 import {
   startScan,
+  stopScan,
   checkPermissions,
+  getAdapterState,
   connect as blecConnect,
   disconnect as blecDisconnect,
   read as blecRead,
@@ -63,6 +65,7 @@ const arrayBufferToNumbers = (buffer) => {
 
 /**
  * 扫描 BLE 设备
+ * startScan 通过 Channel 异步推送设备，invoke 在超时后返回
  * 返回设备列表 [{name, address, rssi, ...}]
  * @param {number} [timeoutMs=5000] - 扫描持续时间
  * @returns {Promise<Array>}
@@ -71,20 +74,48 @@ export async function scanDevices(timeoutMs = 5000) {
   const allDevices = []
   const seen = new Set()
 
-  const granted = await checkPermissions()
-  if (!granted) {
-    console.warn('[BLE/Tauri] 蓝牙权限未授予，无法扫描')
-    return allDevices
+  try {
+    const adapterState = await getAdapterState()
+    console.log('[BLE/Tauri] 蓝牙适配器状态:', adapterState)
+    if (adapterState !== 'On') {
+      console.warn('[BLE/Tauri] 蓝牙适配器未开启，状态:', adapterState)
+      return allDevices
+    }
+  } catch (e) {
+    console.warn('[BLE/Tauri] 获取适配器状态失败:', e)
   }
 
-  await startScan((devices) => {
-    for (const device of devices) {
-      if (!seen.has(device.address)) {
-        seen.add(device.address)
-        allDevices.push(device)
-      }
+  try {
+    const granted = await checkPermissions(true)
+    console.log('[BLE/Tauri] 权限检查结果:', granted)
+    if (!granted) {
+      console.warn('[BLE/Tauri] 蓝牙权限未授予，无法扫描')
+      return allDevices
     }
-  }, timeoutMs)
+  } catch (e) {
+    console.warn('[BLE/Tauri] 权限检查失败:', e)
+  }
+
+  try {
+    console.log('[BLE/Tauri] 开始扫描，超时:', timeoutMs, 'ms')
+    await startScan((devices) => {
+      console.log('[BLE/Tauri] 扫描到设备:', devices.length, '个')
+      for (const device of devices) {
+        if (!seen.has(device.address)) {
+          seen.add(device.address)
+          allDevices.push(device)
+          console.log('[BLE/Tauri] 发现设备:', device.name || '未知', device.address)
+        }
+      }
+    }, timeoutMs)
+    console.log('[BLE/Tauri] 扫描结束，共发现:', allDevices.length, '个设备')
+  } catch (e) {
+    console.error('[BLE/Tauri] 扫描异常:', e)
+  }
+
+  try {
+    await stopScan()
+  } catch (_) { /* 忽略 */ }
 
   return allDevices
 }

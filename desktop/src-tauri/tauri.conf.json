@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "智能花盆",
+  "productName": "SmartFlowerPot",
   "version": "1.0.0",
   "identifier": "com.smart-flower-pot.app",
   "build": {

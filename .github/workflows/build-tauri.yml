@@ -109,6 +109,12 @@ jobs:
         if: matrix.mobile != ''
         run: cd desktop && bunx @tauri-apps/cli ${{ matrix.mobile }} init
 
+      - name: 注入 Android JitPack 仓库
+        if: matrix.mobile == 'android'
+        run: |
+          GRADLE_FILE="desktop/src-tauri/gen/android/build.gradle.kts"
+          sed -i '/allprojects {/,/}/s/mavenCentral()/mavenCentral()\n        maven("https:\/\/jitpack.io")/' "$GRADLE_FILE"
+
       - name: 配置 Android 签名
         if: matrix.mobile == 'android'
         shell: bash

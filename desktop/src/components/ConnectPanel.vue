@@ -97,7 +97,7 @@ function goBack() {
     <div v-else-if="!selectMode" class="flex flex-col sm:flex-row gap-3 w-full max-w-xs">
       <button
         class="flex-1 px-4 py-2.5 sfp-btn-primary rounded-xl font-medium text-sm transition-all duration-200 active:scale-95 flex items-center justify-center gap-1.5"
-        @click="selectMode = 'ble'"
+        @click="selectMode = 'ble'; startBleScan()"
       >
         🔵 蓝牙连接
       </button>
@@ -139,7 +139,7 @@ function goBack() {
         </button>
       </div>
 
-      <p v-else-if="!scanning" class="text-xs text-[rgb(var(--sfp-text-muted))]">点击上方按钮扫描附近的蓝牙设备</p>
+      <p v-else-if="!scanning" class="text-xs text-[rgb(var(--sfp-text-muted))]">未发现附近蓝牙设备，点击上方按钮重新扫描</p>
     </div>
 
     <!-- 串口选择 -->

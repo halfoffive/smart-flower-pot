@@ -9,6 +9,7 @@
     "opener:default",
     "blec:default",
     "serialplugin:default",
+    "serialplugin:allow-write-binary",
     "deep-link:default",
     "store:default"
   ]

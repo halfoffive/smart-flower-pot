@@ -76,11 +76,16 @@ export async function connect(path, onSensorData, onDisconnect) {
     await port.startListening()
 
     listenUnsubscribe = await port.listen((data) => {
-      if (typeof data === 'string') {
-        const bytes = hexStringToUint8Array(data)
-        rxBuffer = appendRxBuffer(rxBuffer, bytes)
-        processRxBuffer()
+      let bytes
+      if (data instanceof Uint8Array) {
+        bytes = data
+      } else if (typeof data === 'string') {
+        bytes = hexStringToUint8Array(data)
+      } else {
+        return
       }
+      rxBuffer = appendRxBuffer(rxBuffer, bytes)
+      processRxBuffer()
     })
 
     console.log('[Serial/Tauri] ✅ 连接成功')
@@ -291,8 +296,7 @@ function calculateXOR(data, length) {
 }
 
 async function writeFrame(frame) {
-  const hexStr = uint8ArrayToHexString(frame)
-  await port.write(hexStr)
+  await port.writeBinary(frame)
 }
 
 function waitForResponse(expectedType, timeoutMs) {
@@ -328,18 +332,6 @@ const hexStringToUint8Array = (hex) => {
     bytes[i / 2] = parseInt(clean.substring(i, i + 2), 16)
   }
   return bytes
-}
-
-/**
- * Uint8Array → 十六进制字符串
- * tauri-plugin-serialplugin 的 write 方法接受十六进制字符串
- * @param {Uint8Array} bytes
- * @returns {string}
- */
-const uint8ArrayToHexString = (bytes) => {
-  return Array.from(bytes)
-    .map((b) => b.toString(16).padStart(2, '0').toUpperCase())
-    .join('')
 }
 
 async function cleanup() {

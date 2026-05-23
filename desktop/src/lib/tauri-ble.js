@@ -18,6 +18,7 @@
 
 import {
   startScan,
+  checkPermissions,
   connect as blecConnect,
   disconnect as blecDisconnect,
   read as blecRead,
@@ -69,6 +70,12 @@ const arrayBufferToNumbers = (buffer) => {
 export async function scanDevices(timeoutMs = 5000) {
   const allDevices = []
   const seen = new Set()
+
+  const granted = await checkPermissions()
+  if (!granted) {
+    console.warn('[BLE/Tauri] 蓝牙权限未授予，无法扫描')
+    return allDevices
+  }
 
   await startScan((devices) => {
     for (const device of devices) {
@@ -138,7 +145,7 @@ export async function connectWithDevice(address, onSensorData, onDisconnect) {
  */
 async function subscribeSensor() {
   try {
-    await blecSubscribe(SENSOR_CHAR_UUID, SERVICE_UUID, (data) => {
+    await blecSubscribe(SENSOR_CHAR_UUID, (data) => {
       if (data && onSensorDataCb) {
         const buffer = numbersToArrayBuffer(data)
         onSensorDataCb(buffer)

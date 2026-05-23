@@ -120,21 +120,24 @@ export function useConnection(showAlert, showToast) {
 
       connected.value = true
       connectionMode.value = 'ble'
+      connecting.value = false
 
-      await readDeviceData(ble)
-      await saveLastConnection({ mode: 'ble', address })
-
-      console.log('[连接] BLE 连接成功:', address)
+      readDeviceData(ble).then(() => {
+        saveLastConnection({ mode: 'ble', address })
+        console.log('[连接] BLE 连接成功:', address)
+      }).catch((e) => {
+        console.warn('[连接] BLE 连接后读取数据失败:', e)
+        saveLastConnection({ mode: 'ble', address })
+      })
     } catch (error) {
       console.error('BLE 连接失败:', error)
+      connecting.value = false
       showAlert(
         '1. ESP32-C6 已上电且运行\n' +
         '2. 设备蓝牙已开启\n' +
         '3. 设备未被其他程序占用',
         '蓝牙连接失败'
       )
-    } finally {
-      connecting.value = false
     }
   }
 
@@ -149,21 +152,24 @@ export function useConnection(showAlert, showToast) {
 
       connected.value = true
       connectionMode.value = 'serial'
+      connecting.value = false
 
-      await readDeviceData(serial)
-      await saveLastConnection({ mode: 'serial', path })
-
-      console.log('[连接] 串口连接成功:', path)
+      readDeviceData(serial).then(() => {
+        saveLastConnection({ mode: 'serial', path })
+        console.log('[连接] 串口连接成功:', path)
+      }).catch((e) => {
+        console.warn('[连接] 串口连接后读取数据失败:', e)
+        saveLastConnection({ mode: 'serial', path })
+      })
     } catch (error) {
       console.error('Serial 连接失败:', error)
+      connecting.value = false
       showAlert(
         '1. ESP32-C6 已通过 USB 连接\n' +
         '2. 未占用串口的其他程序（如 Arduino IDE 串口监视器）\n' +
         '3. 串口驱动已正确安装',
         '串口连接失败'
       )
-    } finally {
-      connecting.value = false
     }
   }
 

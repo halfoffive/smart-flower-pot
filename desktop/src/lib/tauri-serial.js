@@ -76,17 +76,10 @@ export async function connect(path, onSensorData, onDisconnect) {
     await port.startListening()
 
     listenUnsubscribe = await port.listen((data) => {
-      let bytes
-      if (data instanceof Uint8Array) {
-        bytes = data
-      } else if (typeof data === 'string') {
-        bytes = hexStringToUint8Array(data)
-      } else {
-        return
-      }
-      rxBuffer = appendRxBuffer(rxBuffer, bytes)
+      if (!(data instanceof Uint8Array)) return
+      rxBuffer = appendRxBuffer(rxBuffer, data)
       processRxBuffer()
-    })
+    }, false)
 
     console.log('[Serial/Tauri] ✅ 连接成功')
     return true
@@ -318,21 +311,6 @@ function waitForResponse(expectedType, timeoutMs) {
 // ═══════════════════════════════════════════
 // 数据格式转换工具
 // ═══════════════════════════════════════════
-
-/**
- * 十六进制字符串 → Uint8Array
- * tauri-plugin-serialplugin 的 listen 回调返回十六进制字符串
- * @param {string} hex - 十六进制字符串（如 "AA550106..."）
- * @returns {Uint8Array}
- */
-const hexStringToUint8Array = (hex) => {
-  const clean = hex.replace(/\s/g, '')
-  const bytes = new Uint8Array(clean.length / 2)
-  for (let i = 0; i < clean.length; i += 2) {
-    bytes[i / 2] = parseInt(clean.substring(i, i + 2), 16)
-  }
-  return bytes
-}
 
 async function cleanup() {
   connected = false

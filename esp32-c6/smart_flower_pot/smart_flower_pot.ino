@@ -12,61 +12,61 @@
 #include <DHT.h>
 
 /* ===================== 引脚定义 ===================== */
-#define SOIL_ADC_PIN   0    // 土壤湿度传感器（ADC1_CH0）
-#define DHT_PIN        4    // DHT11 数据引脚
-#define DHT_TYPE       DHT11
-#define PUMP_POS_PIN   5    // 水泵正转（H桥方向A）
-#define PUMP_NEG_PIN   6    // 水泵反转（H桥方向B）
-#define PUMP_PWM_PIN   7    // 水泵 PWM 调速
+#define SOIL_ADC_PIN 0  // 土壤湿度传感器（ADC1_CH0）
+#define DHT_PIN 4       // DHT11 数据引脚
+#define DHT_TYPE DHT11
+#define PUMP_POS_PIN 5  // 水泵正转（H桥方向A）
+#define PUMP_NEG_PIN 6  // 水泵反转（H桥方向B）
+#define PUMP_PWM_PIN 7  // 水泵 PWM 调速
 
 /* ===================== PWM 配置 ===================== */
-#define PWM_FREQ       5000 // PWM 频率 5kHz
-#define PWM_RESOLUTION 8    // 8位分辨率（0-255）
+#define PWM_FREQ 5000     // PWM 频率 5kHz
+#define PWM_RESOLUTION 8  // 8位分辨率（0-255）
 // PWM_CHANNEL 在 Arduino-ESP32 3.x 中已废弃，通过引脚直接控制
 
 /* ===================== 定时参数 ===================== */
-#define IDLE_INTERVAL_MS     2000   // 空闲态检测周期 2秒
+#define IDLE_INTERVAL_MS 2000       // 空闲态检测周期 2秒
 #define WATERING_INTERVAL_MS 200    // 灌溉态检测周期 200毫秒
 #define BLE_NOTIFY_INTERVAL_MS 500  // BLE 通知推送周期 0.5秒
-#define MAX_WATERING_MS      5000  // 最长灌溉时间 5秒
+#define MAX_WATERING_MS 5000        // 最长灌溉时间 5秒
 
 /* ===================== BLE UUID ===================== */
-#define SERVICE_UUID        "12345678-1234-1234-1234-123456789abc"
-#define SETTINGS_CHAR_UUID  "12345678-1234-1234-1234-123456789abd"
-#define SENSOR_CHAR_UUID    "12345678-1234-1234-1234-123456789abe"
-#define DEVICE_INFO_UUID    "12345678-1234-1234-1234-123456789abf"
+#define SERVICE_UUID "12345678-1234-1234-1234-123456789abc"
+#define SETTINGS_CHAR_UUID "12345678-1234-1234-1234-123456789abd"
+#define SENSOR_CHAR_UUID "12345678-1234-1234-1234-123456789abe"
+#define DEVICE_INFO_UUID "12345678-1234-1234-1234-123456789abf"
 
 /* ===================== 设置默认值 ===================== */
-#define DEFAULT_TEMP_MIN      150   // 15.0°C
-#define DEFAULT_TEMP_MAX      350   // 35.0°C
-#define DEFAULT_HUM_MIN       30    // 30%
-#define DEFAULT_HUM_MAX       80    // 80%
-#define DEFAULT_SOIL_THR      2000  // ADC 阈值
-#define DEFAULT_COMPARE_MODE  0     // 0=低于启动
-#define DEFAULT_PUMP_SPEED    128   // PWM 50%
-#define DEFAULT_WATER_DIR     0     // 0=正转
+#define DEFAULT_TEMP_MIN 150    // 15.0°C
+#define DEFAULT_TEMP_MAX 350    // 35.0°C
+#define DEFAULT_HUM_MIN 30      // 30%
+#define DEFAULT_HUM_MAX 80      // 80%
+#define DEFAULT_SOIL_THR 2000   // ADC 阈值
+#define DEFAULT_COMPARE_MODE 0  // 0=低于启动
+#define DEFAULT_PUMP_SPEED 128  // PWM 50%
+#define DEFAULT_WATER_DIR 0     // 0=正转
 
 /* ===================== NVS 键名 ===================== */
 #define NVS_NS "flowerpot"
-#define KEY_TEMP_MIN    "tempMin"
-#define KEY_TEMP_MAX    "tempMax"
-#define KEY_HUM_MIN     "humMin"
-#define KEY_HUM_MAX     "humMax"
-#define KEY_SOIL_THR    "soilThr"
-#define KEY_CMP_MODE    "cmpMode"
-#define KEY_PUMP_SPEED  "pumpSpd"
-#define KEY_WATER_DIR   "watDir"
+#define KEY_TEMP_MIN "tempMin"
+#define KEY_TEMP_MAX "tempMax"
+#define KEY_HUM_MIN "humMin"
+#define KEY_HUM_MAX "humMax"
+#define KEY_SOIL_THR "soilThr"
+#define KEY_CMP_MODE "cmpMode"
+#define KEY_PUMP_SPEED "pumpSpd"
+#define KEY_WATER_DIR "watDir"
 
 /* ===================== 枚举定义 ===================== */
 enum PumpState : uint8_t {
-  PUMP_OFF     = 0,  // 水泵停止
+  PUMP_OFF = 0,      // 水泵停止
   PUMP_FORWARD = 1,  // 正转浇水
   PUMP_REVERSE = 2   // 反转浇水
 };
 
 enum SystemState : uint8_t {
-  STATE_IDLE,      // 空闲态：长周期检测，水泵停止
-  STATE_WATERING   // 灌溉态：高频检测，水泵运行
+  STATE_IDLE,     // 空闲态：长周期检测，水泵停止
+  STATE_WATERING  // 灌溉态：高频检测，水泵运行
 };
 
 enum CompareMode : uint8_t {
@@ -78,45 +78,45 @@ enum CompareMode : uint8_t {
 #define WATER_DIR_SAVE_ONLY 0xFF
 
 /* ===================== 全局对象与变量 ===================== */
-DHT dht(DHT_PIN, DHT_TYPE);     // DHT11 温湿度传感器
-Preferences prefs;               // NVS 闪存存储
+DHT dht(DHT_PIN, DHT_TYPE);  // DHT11 温湿度传感器
+Preferences prefs;           // NVS 闪存存储
 
 // ── BLE 特征指针 ──
-BLECharacteristic *pSettingsChar   = nullptr;  // 设置特征（可读写）
-BLECharacteristic *pSensorChar     = nullptr;  // 传感器特征（可读+通知）
+BLECharacteristic *pSettingsChar = nullptr;    // 设置特征（可读写）
+BLECharacteristic *pSensorChar = nullptr;      // 传感器特征（可读+通知）
 BLECharacteristic *pDeviceInfoChar = nullptr;  // 设备信息特征（只读）
 
 // ── 连接状态 ──
-bool deviceConnected    = false;  // 当前是否有 BLE 客户端连接
+bool deviceConnected = false;     // 当前是否有 BLE 客户端连接
 bool oldDeviceConnected = false;  // 上一轮连接状态（用于检测变化）
 
 // ── 系统状态 ──
-SystemState   systemState       = STATE_IDLE;     // 当前系统状态
-PumpState     pumpState         = PUMP_OFF;       // 当前水泵状态
-bool          manualOverride    = false;          // 手动控制模式（来自网页测试页）
-unsigned long lastReadTime      = 0;              // 上次读取传感器的时间戳
-unsigned long lastBleNotifyTime = 0;              // 上次 BLE 通知推送的时间戳
-unsigned long wateringStartTime = 0;              // 本次灌溉开始时间戳
+SystemState systemState = STATE_IDLE;  // 当前系统状态
+PumpState pumpState = PUMP_OFF;        // 当前水泵状态
+bool manualOverride = false;           // 手动控制模式（来自网页测试页）
+unsigned long lastReadTime = 0;        // 上次读取传感器的时间戳
+unsigned long lastBleNotifyTime = 0;   // 上次 BLE 通知推送的时间戳
+unsigned long wateringStartTime = 0;   // 本次灌溉开始时间戳
 
 // ── 用户可调设置 ──
-uint16_t tempMin        = DEFAULT_TEMP_MIN;     // 温度下限（×10）
-uint16_t tempMax        = DEFAULT_TEMP_MAX;     // 温度上限（×10）
-uint8_t  humMin         = DEFAULT_HUM_MIN;      // 湿度下限（%）
-uint8_t  humMax         = DEFAULT_HUM_MAX;      // 湿度上限（%）
-uint16_t soilThreshold  = DEFAULT_SOIL_THR;     // 土壤湿度 ADC 阈值
-uint8_t  compareMode    = DEFAULT_COMPARE_MODE; // 比较模式
-uint8_t  pumpSpeed      = DEFAULT_PUMP_SPEED;   // 水泵 PWM 转速
-uint8_t  waterDirection = DEFAULT_WATER_DIR;    // 浇水方向
+uint16_t tempMin = DEFAULT_TEMP_MIN;         // 温度下限（×10）
+uint16_t tempMax = DEFAULT_TEMP_MAX;         // 温度上限（×10）
+uint8_t humMin = DEFAULT_HUM_MIN;            // 湿度下限（%）
+uint8_t humMax = DEFAULT_HUM_MAX;            // 湿度上限（%）
+uint16_t soilThreshold = DEFAULT_SOIL_THR;   // 土壤湿度 ADC 阈值
+uint8_t compareMode = DEFAULT_COMPARE_MODE;  // 比较模式
+uint8_t pumpSpeed = DEFAULT_PUMP_SPEED;      // 水泵 PWM 转速
+uint8_t waterDirection = DEFAULT_WATER_DIR;  // 浇水方向
 
 // ── 当前传感器读数 ──
-uint16_t currentSoil = 0;   // 土壤湿度 ADC 值
-uint16_t currentTemp = 0;   // 温度（×10）
-uint8_t  currentHum  = 0;   // 空气湿度（%）
+uint16_t currentSoil = 0;  // 土壤湿度 ADC 值
+uint16_t currentTemp = 0;  // 温度（×10）
+uint8_t currentHum = 0;    // 空气湿度（%）
 
 /* ===================== 串口帧协议常量 ===================== */
-#define SERIAL_FRAME_HEAD1  0xAA
-#define SERIAL_FRAME_HEAD2  0x55
-#define SERIAL_TYPE_SENSOR  0x01
+#define SERIAL_FRAME_HEAD1 0xAA
+#define SERIAL_FRAME_HEAD2 0x55
+#define SERIAL_TYPE_SENSOR 0x01
 #define SERIAL_TYPE_SETTINGS 0x02
 #define SERIAL_TYPE_DEVICE_INFO 0x03
 #define SERIAL_TYPE_READ_SETTINGS 0x04
@@ -130,8 +130,8 @@ void deserializeSettings(uint8_t *buffer);  // 从 11 字节解码设置
 void serializeSensorData(uint8_t *buffer);  // 传感器数据编码为 6 字节
 
 // ── 传感器 ──
-void readSensors();        // 读取所有传感器
-void printSensorData();    // 串口打印传感器数据
+void readSensors();      // 读取所有传感器
+void printSensorData();  // 串口打印传感器数据
 
 // ── 水泵控制 ──
 void startPump(PumpState direction);  // 启动水泵（指定方向）
@@ -143,12 +143,12 @@ bool shouldStopWatering();   // 是否满足灌溉停止条件
 void checkWatering();        // 灌溉状态机
 
 // ── 串口通信 ──
-void handleSerialCommand();              // 处理串口命令
+void handleSerialCommand();                                      // 处理串口命令
 void sendSerialFrame(uint8_t type, uint8_t *data, uint8_t len);  // 发送串口帧
-void sendSensorDataSerial();             // 通过串口发送传感器数据
-void sendSettingsSerial();               // 通过串口发送设置数据
-void sendDeviceInfoSerial();             // 通过串口发送设备信息
-uint8_t calcXOR(uint8_t *data, uint8_t len);  // 计算 XOR 校验
+void sendSensorDataSerial();                                     // 通过串口发送传感器数据
+void sendSettingsSerial();                                       // 通过串口发送设置数据
+void sendDeviceInfoSerial();                                     // 通过串口发送设备信息
+uint8_t calcXOR(uint8_t *data, uint8_t len);                     // 计算 XOR 校验
 
 /* ===================== BLE 回调类实现 ===================== */
 
@@ -156,18 +156,18 @@ uint8_t calcXOR(uint8_t *data, uint8_t len);  // 计算 XOR 校验
 class SettingsCallbacks : public BLECharacteristicCallbacks {
   void onWrite(BLECharacteristic *pCharacteristic) override {
     uint8_t *data = pCharacteristic->getData();
-    size_t   len  = pCharacteristic->getValue().length();
+    size_t len = pCharacteristic->getValue().length();
 
     Serial.println("[BLE] 收到设置写入请求");
     Serial.printf("[BLE] 数据长度: %d 字节\n", len);
 
     if (len == 11) {
-      uint8_t newSpeed = data[9];       // 新的水泵转速
-      uint8_t newDir   = data[10];      // 新的浇水方向
+      uint8_t newSpeed = data[9];  // 新的水泵转速
+      uint8_t newDir = data[10];   // 新的浇水方向
 
       // 保存旧值，用于水泵控制决策
       uint8_t prevPumpSpeed = pumpSpeed;
-      uint8_t prevWaterDir  = waterDirection;
+      uint8_t prevWaterDir = waterDirection;
 
       deserializeSettings(data);
 
@@ -250,28 +250,28 @@ class ServerCallbacks : public BLEServerCallbacks {
 //   [9]    水泵转速 uint8 (0-255)
 //   [10]   浇水方向 uint8 (0=正转, 1=反转)
 void serializeSettings(uint8_t *buffer) {
-  buffer[0]  = tempMin & 0xFF;
-  buffer[1]  = (tempMin >> 8) & 0xFF;
-  buffer[2]  = tempMax & 0xFF;
-  buffer[3]  = (tempMax >> 8) & 0xFF;
-  buffer[4]  = humMin;
-  buffer[5]  = humMax;
-  buffer[6]  = soilThreshold & 0xFF;
-  buffer[7]  = (soilThreshold >> 8) & 0xFF;
-  buffer[8]  = compareMode;
-  buffer[9]  = pumpSpeed;
+  buffer[0] = tempMin & 0xFF;
+  buffer[1] = (tempMin >> 8) & 0xFF;
+  buffer[2] = tempMax & 0xFF;
+  buffer[3] = (tempMax >> 8) & 0xFF;
+  buffer[4] = humMin;
+  buffer[5] = humMax;
+  buffer[6] = soilThreshold & 0xFF;
+  buffer[7] = (soilThreshold >> 8) & 0xFF;
+  buffer[8] = compareMode;
+  buffer[9] = pumpSpeed;
   buffer[10] = waterDirection;
 }
 
 // 从网页端发来的 11 字节解码设置并应用
 void deserializeSettings(uint8_t *buffer) {
-  tempMin        = buffer[0] | (buffer[1] << 8);
-  tempMax        = buffer[2] | (buffer[3] << 8);
-  humMin         = buffer[4];
-  humMax         = buffer[5];
-  soilThreshold  = buffer[6] | (buffer[7] << 8);
-  compareMode    = buffer[8];
-  pumpSpeed      = buffer[9];
+  tempMin = buffer[0] | (buffer[1] << 8);
+  tempMax = buffer[2] | (buffer[3] << 8);
+  humMin = buffer[4];
+  humMax = buffer[5];
+  soilThreshold = buffer[6] | (buffer[7] << 8);
+  compareMode = buffer[8];
+  pumpSpeed = buffer[9];
   waterDirection = buffer[10];
 
   Serial.println("[设置] ─── 已更新 ───");
@@ -304,14 +304,14 @@ void serializeSensorData(uint8_t *buffer) {
 void loadSettings() {
   prefs.begin(NVS_NS, false);
 
-  tempMin        = prefs.getUShort(KEY_TEMP_MIN,  DEFAULT_TEMP_MIN);
-  tempMax        = prefs.getUShort(KEY_TEMP_MAX,  DEFAULT_TEMP_MAX);
-  humMin         = prefs.getUChar(KEY_HUM_MIN,    DEFAULT_HUM_MIN);
-  humMax         = prefs.getUChar(KEY_HUM_MAX,    DEFAULT_HUM_MAX);
-  soilThreshold  = prefs.getUShort(KEY_SOIL_THR,  DEFAULT_SOIL_THR);
-  compareMode    = prefs.getUChar(KEY_CMP_MODE,   DEFAULT_COMPARE_MODE);
-  pumpSpeed      = prefs.getUChar(KEY_PUMP_SPEED, DEFAULT_PUMP_SPEED);
-  waterDirection = prefs.getUChar(KEY_WATER_DIR,  DEFAULT_WATER_DIR);
+  tempMin = prefs.getUShort(KEY_TEMP_MIN, DEFAULT_TEMP_MIN);
+  tempMax = prefs.getUShort(KEY_TEMP_MAX, DEFAULT_TEMP_MAX);
+  humMin = prefs.getUChar(KEY_HUM_MIN, DEFAULT_HUM_MIN);
+  humMax = prefs.getUChar(KEY_HUM_MAX, DEFAULT_HUM_MAX);
+  soilThreshold = prefs.getUShort(KEY_SOIL_THR, DEFAULT_SOIL_THR);
+  compareMode = prefs.getUChar(KEY_CMP_MODE, DEFAULT_COMPARE_MODE);
+  pumpSpeed = prefs.getUChar(KEY_PUMP_SPEED, DEFAULT_PUMP_SPEED);
+  waterDirection = prefs.getUChar(KEY_WATER_DIR, DEFAULT_WATER_DIR);
 
   // 校验浇水方向：仅允许 0(正转) 或 1(反转)
   // 旧固件可能将 0xFF（仅保存标志）写入 NVS，导致水泵始终反转
@@ -335,14 +335,14 @@ void loadSettings() {
 void saveSettings() {
   prefs.begin(NVS_NS, false);
 
-  prefs.putUShort(KEY_TEMP_MIN,  tempMin);
-  prefs.putUShort(KEY_TEMP_MAX,  tempMax);
-  prefs.putUChar(KEY_HUM_MIN,    humMin);
-  prefs.putUChar(KEY_HUM_MAX,    humMax);
-  prefs.putUShort(KEY_SOIL_THR,  soilThreshold);
-  prefs.putUChar(KEY_CMP_MODE,   compareMode);
+  prefs.putUShort(KEY_TEMP_MIN, tempMin);
+  prefs.putUShort(KEY_TEMP_MAX, tempMax);
+  prefs.putUChar(KEY_HUM_MIN, humMin);
+  prefs.putUChar(KEY_HUM_MAX, humMax);
+  prefs.putUShort(KEY_SOIL_THR, soilThreshold);
+  prefs.putUChar(KEY_CMP_MODE, compareMode);
   prefs.putUChar(KEY_PUMP_SPEED, pumpSpeed);
-  prefs.putUChar(KEY_WATER_DIR,  waterDirection);
+  prefs.putUChar(KEY_WATER_DIR, waterDirection);
 
   prefs.end();
   Serial.println("[NVS] 设置已保存到闪存");
@@ -362,7 +362,7 @@ void readSensors() {
   }
 
   currentTemp = (uint16_t)(t * 10.0);  // 温度 ×10 存储，保留 1 位小数精度
-  currentHum  = (uint8_t)h;
+  currentHum = (uint8_t)h;
 
   // 读取土壤湿度 ADC
   currentSoil = analogRead(SOIL_ADC_PIN);
@@ -430,7 +430,7 @@ String buildDeviceInfoJson() {
   snprintf(macStr, sizeof(macStr), "%02X:%02X:%02X:%02X:%02X:%02X",
            (uint8_t)(mac >> 40), (uint8_t)(mac >> 32),
            (uint8_t)(mac >> 24), (uint8_t)(mac >> 16),
-           (uint8_t)(mac >> 8),  (uint8_t)(mac));
+           (uint8_t)(mac >> 8), (uint8_t)(mac));
 
   String json = "{";
   json += "\"fw\":\"4.2.0\"";
@@ -482,70 +482,73 @@ void handleSerialCommand() {
           uint8_t *payload = &rxBuffer[4];
 
           switch (type) {
-            case SERIAL_TYPE_SETTINGS: {
-              // 收到设置写入帧（11 字节）
-              if (payloadLen == 11) {
-                uint8_t newSpeed = payload[9];
-                uint8_t newDir   = payload[10];
+            case SERIAL_TYPE_SETTINGS:
+              {
+                // 收到设置写入帧（11 字节）
+                if (payloadLen == 11) {
+                  uint8_t newSpeed = payload[9];
+                  uint8_t newDir = payload[10];
 
-                // 保存旧值，用于水泵控制决策
-                uint8_t prevPumpSpeed = pumpSpeed;
-                uint8_t prevWaterDir  = waterDirection;
+                  // 保存旧值，用于水泵控制决策
+                  uint8_t prevPumpSpeed = pumpSpeed;
+                  uint8_t prevWaterDir = waterDirection;
 
-                deserializeSettings(payload);
+                  deserializeSettings(payload);
 
-                // "仅保存设置"模式（向后兼容）：恢复旧方向值，防止 0xFF 写入 NVS
-                if (newDir == WATER_DIR_SAVE_ONLY) {
-                  waterDirection = prevWaterDir;
-                }
+                  // "仅保存设置"模式（向后兼容）：恢复旧方向值，防止 0xFF 写入 NVS
+                  if (newDir == WATER_DIR_SAVE_ONLY) {
+                    waterDirection = prevWaterDir;
+                  }
 
-                saveSettings();
+                  saveSettings();
 
-                // ── 水泵控制逻辑（解耦：方向保存与水泵触发分离） ──
-                if (newDir == WATER_DIR_SAVE_ONLY) {
-                  Serial.println("[Serial] ✓ 仅保存设置（不触发水泵）");
-                }
-                // 速度从 0 变为非 0：启动水泵（手动模式）
-                else if (newSpeed > 0 && prevPumpSpeed == 0 && systemState == STATE_IDLE && !shouldStartWatering()) {
-                  manualOverride = true;
-                  Serial.println("[Serial 手动控制] ▶ 启动水泵（手动模式）");
-                  startPump(newDir == 0 ? PUMP_FORWARD : PUMP_REVERSE);
-                }
-                // 速度从非 0 变为 0：停止水泵（退出手动模式）
-                else if (newSpeed == 0 && prevPumpSpeed > 0 && manualOverride) {
-                  manualOverride = false;
-                  stopPump();
-                  Serial.println("[Serial 手动控制] ■ 停止水泵，退出手动模式");
-                }
-                // 手动模式中方向变更：重启水泵
-                else if (manualOverride && newDir != prevWaterDir && newSpeed > 0) {
-                  Serial.println("[Serial 手动控制] ↻ 方向变更，重启水泵");
-                  startPump(newDir == 0 ? PUMP_FORWARD : PUMP_REVERSE);
-                }
-                // 自动灌溉中：仅更新转速（PWM 实时生效）
-                else if (systemState == STATE_WATERING && pumpState != PUMP_OFF) {
-                  ledcWrite(PUMP_PWM_PIN, pumpSpeed);
-                  Serial.printf("[Serial 自动灌溉] 转速已更新为 %d / 255\n", pumpSpeed);
-                }
+                  // ── 水泵控制逻辑（解耦：方向保存与水泵触发分离） ──
+                  if (newDir == WATER_DIR_SAVE_ONLY) {
+                    Serial.println("[Serial] ✓ 仅保存设置（不触发水泵）");
+                  }
+                  // 速度从 0 变为非 0：启动水泵（手动模式）
+                  else if (newSpeed > 0 && prevPumpSpeed == 0 && systemState == STATE_IDLE && !shouldStartWatering()) {
+                    manualOverride = true;
+                    Serial.println("[Serial 手动控制] ▶ 启动水泵（手动模式）");
+                    startPump(newDir == 0 ? PUMP_FORWARD : PUMP_REVERSE);
+                  }
+                  // 速度从非 0 变为 0：停止水泵（退出手动模式）
+                  else if (newSpeed == 0 && prevPumpSpeed > 0 && manualOverride) {
+                    manualOverride = false;
+                    stopPump();
+                    Serial.println("[Serial 手动控制] ■ 停止水泵，退出手动模式");
+                  }
+                  // 手动模式中方向变更：重启水泵
+                  else if (manualOverride && newDir != prevWaterDir && newSpeed > 0) {
+                    Serial.println("[Serial 手动控制] ↻ 方向变更，重启水泵");
+                    startPump(newDir == 0 ? PUMP_FORWARD : PUMP_REVERSE);
+                  }
+                  // 自动灌溉中：仅更新转速（PWM 实时生效）
+                  else if (systemState == STATE_WATERING && pumpState != PUMP_OFF) {
+                    ledcWrite(PUMP_PWM_PIN, pumpSpeed);
+                    Serial.printf("[Serial 自动灌溉] 转速已更新为 %d / 255\n", pumpSpeed);
+                  }
 
-                Serial.println("[Serial] 设置已更新并保存到闪存");
+                  Serial.println("[Serial] 设置已更新并保存到闪存");
+                }
+                break;
               }
-              break;
-            }
 
-            case SERIAL_TYPE_READ_SETTINGS: {
-              // 收到读取设置请求
-              Serial.println("[Serial] 收到读取设置请求");
-              sendSettingsSerial();
-              break;
-            }
+            case SERIAL_TYPE_READ_SETTINGS:
+              {
+                // 收到读取设置请求
+                Serial.println("[Serial] 收到读取设置请求");
+                sendSettingsSerial();
+                break;
+              }
 
-            case SERIAL_TYPE_DEVICE_INFO: {
-              // 收到读取设备信息请求
-              Serial.println("[Serial] 收到读取设备信息请求");
-              sendDeviceInfoSerial();
-              break;
-            }
+            case SERIAL_TYPE_DEVICE_INFO:
+              {
+                // 收到读取设备信息请求
+                Serial.println("[Serial] 收到读取设备信息请求");
+                sendDeviceInfoSerial();
+                break;
+              }
 
             default:
               Serial.printf("[Serial] 未知帧类型: 0x%02X\n", type);
@@ -647,55 +650,57 @@ bool shouldStopWatering() {
 void checkWatering() {
   switch (systemState) {
 
-    case STATE_IDLE: {
-      // 空闲态 → 检查是否应该启动灌溉
-      if (shouldStartWatering()) {
-        systemState       = STATE_WATERING;
-        wateringStartTime = millis();
+    case STATE_IDLE:
+      {
+        // 空闲态 → 检查是否应该启动灌溉
+        if (shouldStartWatering()) {
+          systemState = STATE_WATERING;
+          wateringStartTime = millis();
 
-        Serial.println("═══════════════════════════════════");
-        Serial.println("[系统] ▶ 进入灌溉状态");
-        Serial.printf("  土壤 ADC=%d (阈值=%d, 模式=%s)\n",
-                      currentSoil, soilThreshold,
-                      compareMode == MODE_BELOW ? "低于启动" : "高于启动");
-        Serial.printf("  温度=%.1f°C (区间 %.1f ~ %.1f)\n",
-                      currentTemp / 10.0, tempMin / 10.0, tempMax / 10.0);
-        Serial.printf("  湿度=%d%% (区间 %d ~ %d)\n",
-                      currentHum, humMin, humMax);
-        Serial.println("═══════════════════════════════════");
+          Serial.println("═══════════════════════════════════");
+          Serial.println("[系统] ▶ 进入灌溉状态");
+          Serial.printf("  土壤 ADC=%d (阈值=%d, 模式=%s)\n",
+                        currentSoil, soilThreshold,
+                        compareMode == MODE_BELOW ? "低于启动" : "高于启动");
+          Serial.printf("  温度=%.1f°C (区间 %.1f ~ %.1f)\n",
+                        currentTemp / 10.0, tempMin / 10.0, tempMax / 10.0);
+          Serial.printf("  湿度=%d%% (区间 %d ~ %d)\n",
+                        currentHum, humMin, humMax);
+          Serial.println("═══════════════════════════════════");
 
-        // 按设定的方向启动水泵
-        startPump(waterDirection == 0 ? PUMP_FORWARD : PUMP_REVERSE);
-      }
-      break;
-    }
-
-    case STATE_WATERING: {
-      // 安全超时检查：防止传感器故障导致无限浇水
-      if (millis() - wateringStartTime > MAX_WATERING_MS) {
-        Serial.println("[系统] ⚠ 灌溉超时（5秒），强制停止！");
-        stopPump();
-        systemState = STATE_IDLE;
+          // 按设定的方向启动水泵
+          startPump(waterDirection == 0 ? PUMP_FORWARD : PUMP_REVERSE);
+        }
         break;
       }
 
-      // 检查是否需要停止灌溉
-      if (shouldStopWatering()) {
-        Serial.println("═══════════════════════════════════");
-        Serial.println("[系统] ◀ 退出灌溉状态");
-
-        if (compareMode == MODE_BELOW) {
-          Serial.printf("  土壤 ADC=%d 已达到阈值 %d\n", currentSoil, soilThreshold);
-        } else {
-          Serial.printf("  土壤 ADC=%d 已降至阈值 %d\n", currentSoil, soilThreshold);
+    case STATE_WATERING:
+      {
+        // 安全超时检查：防止传感器故障导致无限浇水
+        if (millis() - wateringStartTime > MAX_WATERING_MS) {
+          Serial.println("[系统] ⚠ 灌溉超时（5秒），强制停止！");
+          stopPump();
+          systemState = STATE_IDLE;
+          break;
         }
-        Serial.println("═══════════════════════════════════");
 
-        stopPump();
-        systemState = STATE_IDLE;
+        // 检查是否需要停止灌溉
+        if (shouldStopWatering()) {
+          Serial.println("═══════════════════════════════════");
+          Serial.println("[系统] ◀ 退出灌溉状态");
+
+          if (compareMode == MODE_BELOW) {
+            Serial.printf("  土壤 ADC=%d 已达到阈值 %d\n", currentSoil, soilThreshold);
+          } else {
+            Serial.printf("  土壤 ADC=%d 已降至阈值 %d\n", currentSoil, soilThreshold);
+          }
+          Serial.println("═══════════════════════════════════");
+
+          stopPump();
+          systemState = STATE_IDLE;
+        }
+        break;
       }
-      break;
-    }
   }
 }
 
@@ -742,8 +747,7 @@ void setup() {
   // 设置特征（可读可写）
   pSettingsChar = pService->createCharacteristic(
     SETTINGS_CHAR_UUID,
-    BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_WRITE
-  );
+    BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_WRITE);
   pSettingsChar->setCallbacks(new SettingsCallbacks());
   uint8_t initSettings[11];
   serializeSettings(initSettings);
@@ -752,17 +756,15 @@ void setup() {
   // 传感器数据特征（可读 + 通知）
   pSensorChar = pService->createCharacteristic(
     SENSOR_CHAR_UUID,
-    BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY
-  );
+    BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
   // NimBLE 自动管理 CCCD，无需手动添加 BLE2902 描述符
-  uint8_t initSensor[6] = {0};
+  uint8_t initSensor[6] = { 0 };
   pSensorChar->setValue(initSensor, 6);
 
   // 设备信息特征（只读）— JSON 格式，包含 MAC、芯片型号等
   pDeviceInfoChar = pService->createCharacteristic(
     DEVICE_INFO_UUID,
-    BLECharacteristic::PROPERTY_READ
-  );
+    BLECharacteristic::PROPERTY_READ);
   {
     String info = buildDeviceInfoJson();
     pDeviceInfoChar->setValue(info.c_str());
@@ -775,8 +777,8 @@ void setup() {
   BLEAdvertising *pAdvertising = BLEDevice::getAdvertising();
   pAdvertising->addServiceUUID(SERVICE_UUID);
   pAdvertising->setScanResponse(true);
-  pAdvertising->setMinPreferred(0x06);   // 最小连接间隔 ~7.5ms
-  pAdvertising->setMinPreferred(0x12);   // 最大连接间隔 ~22.5ms
+  pAdvertising->setMinPreferred(0x06);  // 最小连接间隔 ~7.5ms
+  pAdvertising->setMinPreferred(0x12);  // 最大连接间隔 ~22.5ms
   BLEDevice::startAdvertising();
 
   Serial.println("[BLE] 广播已开启，等待客户端连接...");
@@ -811,7 +813,7 @@ void loop() {
   if (!deviceConnected && oldDeviceConnected) {
     oldDeviceConnected = deviceConnected;
     Serial.println("[BLE] ✗ 客户端断开事件");
-    delay(500);  // 短暂延时
+    delay(500);                     // 短暂延时
     BLEDevice::startAdvertising();  // 重新开始广播
     Serial.println("[BLE] 广播已恢复");
   }
@@ -824,7 +826,7 @@ void loop() {
   } else if (systemState == STATE_WATERING) {
     interval = WATERING_INTERVAL_MS;  // 灌溉态：200ms 高频检测
   } else {
-    interval = IDLE_INTERVAL_MS;      // 空闲态：2s 低频检测
+    interval = IDLE_INTERVAL_MS;  // 空闲态：2s 低频检测
   }
 
   if (now - lastReadTime >= interval) {

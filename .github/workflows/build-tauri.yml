@@ -24,6 +24,9 @@ concurrency:
   group: tauri-build
   cancel-in-progress: true
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   build:
     permissions:
@@ -42,7 +45,7 @@ jobs:
           - platform: "windows-latest"
             args: ""
           - platform: "ubuntu-latest"
-            args: "--apk true --target aarch64"
+            args: ""
             mobile: "android"
           - platform: "macos-latest"
             args: ""
@@ -52,15 +55,13 @@ jobs:
 
     steps:
       - name: 检出代码
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: 安装 Bun
         uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
 
       - name: 安装前端依赖
-        run: bun install --cwd desktop --frozen-lockfile
+        run: bun install --cwd desktop
 
       - name: 安装 Rust stable（桌面端）
         if: matrix.mobile == ''
@@ -73,6 +74,12 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-linux-android,armv7-linux-androideabi,i686-linux-android,x86_64-linux-android
+
+      - name: 安装 Rust stable（iOS）
+        if: matrix.mobile == 'ios'
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios
 
       - name: 缓存 Rust 构建产物
         uses: Swatinem/rust-cache@v2
@@ -111,11 +118,15 @@ jobs:
           cd desktop/src-tauri/gen/android
           echo "keyAlias=${{ secrets.ANDROID_KEY_ALIAS }}" > keystore.properties
           echo "password=${{ secrets.ANDROID_KEY_PASSWORD }}" >> keystore.properties
-          base64 -d <<< "${{ secrets.ANDROID_KEY_BASE64 }}" > $RUNNER_TEMP/keystore.jks
+          echo "${{ secrets.ANDROID_KEY_BASE64 }}" | base64 -d > $RUNNER_TEMP/keystore.jks
           echo "storeFile=$RUNNER_TEMP/keystore.jks" >> keystore.properties
 
+      - name: 初始化移动端项目
+        if: matrix.mobile != ''
+        run: cd desktop && bunx @tauri-apps/cli ${{ matrix.mobile }} init
+
       - name: 构建 Tauri 应用并发布
-        uses: tauri-apps/tauri-action@v0
+        uses: tauri-apps/tauri-action@ca517bcbe58fd7012408d7ddfaeff950428bdeb1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}

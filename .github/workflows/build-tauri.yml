@@ -115,6 +115,12 @@ jobs:
           GRADLE_FILE="desktop/src-tauri/gen/android/build.gradle.kts"
           sed -i '/allprojects {/,/}/s/mavenCentral()/mavenCentral()\n        maven("https:\/\/jitpack.io")/' "$GRADLE_FILE"
 
+      - name: 修改 Android minSdk 为 26
+        if: matrix.mobile == 'android'
+        run: |
+          GRADLE_FILE="desktop/src-tauri/gen/android/app/build.gradle.kts"
+          sed -i 's/minSdk = 24/minSdk = 26/' "$GRADLE_FILE"
+
       - name: 配置 Android 签名
         if: matrix.mobile == 'android'
         shell: bash

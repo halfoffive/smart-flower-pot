@@ -1,5 +1,50 @@
 # 更新日志
 
+## [4.3.0] — 2026-05-23
+
+### 新增
+- **ESP32 系列多芯片适配**：固件通过条件编译（`CONFIG_IDF_TARGET_*` 宏）自动识别芯片型号并适配引脚
+  - 支持 ESP32、ESP32-C3、ESP32-C6、ESP32-S2、ESP32-S3 五款芯片
+  - 每款芯片定义专属引脚映射（土壤 ADC、DHT11、H桥方向、PWM 调速）
+  - ESP32-S2 不支持 BLE，自动定义 `NO_BLE` 宏禁用所有蓝牙代码
+  - 不支持的芯片编译时报错（`#error` 提示）
+- **串口就绪信号**：解决 ESP32 复位后串口连接超时问题
+  - 固件 `setup()` 末尾主动发送设备信息帧（类型 `0x03`）作为就绪信号
+  - Web 端 `serial.js` 新增 `waitForReady()` 机制，打开串口后等待首帧（最长 5 秒超时）
+  - Tauri 端 `tauri-serial.js` 同步实现 `waitForReady()` 机制
+  - 超时后优雅降级：继续连接流程，不阻断用户操作
+- **数据读取重试逻辑**：提高首次连接可靠性
+  - Web 端和桌面端 `useConnection.js` 的 `readDeviceData()` 增加重试机制
+  - `readSettings()` 和 `readDeviceInfo()` 最多重试 2 次，每次间隔 1 秒
+  - 读取失败仅 console.warn，不阻断连接状态
+- **USB VID 过滤扩展**：Web 端串口连接支持更多 USB 转串口芯片
+  - 新增 Espressif 原生 USB (0x303a) 和 FTDI (0x0403) 过滤
+  - 原有 CP210x (0x10c4) 和 CH340 (0x1a86) 保持不变
+
+### 变更
+- **目录重命名**：`esp32-c6/` → `esp32/`，反映固件对 ESP32 系列的通用支持
+- **版本号统一**：web/desktop/tauri/ESP32 固件版本号统一为 4.3.0
+- **Service Worker 缓存版本升级**：`flowerpot-v6` → `flowerpot-v7`，确保前端资源更新
+- **固件启动横幅更新**：显示实际芯片型号（`ESP.getChipModel()`），而非硬编码 ESP32-C6
+
+### 修复
+- **串口连接超时**：根本原因是应用打开串口后立即发送命令，而 ESP32 复位后尚未完成初始化。修复后固件启动完成发送就绪信号，客户端等待就绪信号后再通信
+- **ESP32 系列芯片不兼容**：固件仅支持 ESP32-C6 引脚定义，其他芯片引脚不匹配导致功能异常。修复后通过条件编译自动适配
+
+### 修改文件
+- `esp32-c6/smart_flower_pot/smart_flower_pot.ino` → `esp32/smart_flower_pot/smart_flower_pot.ino` — 多芯片条件编译 + 就绪信号 + 版本号 4.3.0
+- `web/src/lib/serial.js` — waitForReady 机制 + USB VID 扩展
+- `web/src/composables/useConnection.js` — readDeviceData 重试逻辑
+- `desktop/src/lib/tauri-serial.js` — waitForReady 机制 + 显式串口参数
+- `desktop/src/composables/useConnection.js` — readDeviceData 重试逻辑
+- `web/public/sw.js` — 缓存版本 v7
+- `web/package.json` — 版本号 4.3.0
+- `desktop/package.json` — 版本号 4.3.0
+- `desktop/src-tauri/tauri.conf.json` — 版本号 4.3.0
+- `README.md` — 多芯片硬件清单 + 目录更新 + 就绪信号文档
+- `AGENTS.md` — 多芯片适配说明 + 就绪信号 + 缓存版本 v7
+- `CHANGELOG.md` — 本文档
+
 ## [4.2.0] — 2026-05-23
 
 ### 新增

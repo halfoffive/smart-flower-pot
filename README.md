@@ -1,8 +1,10 @@
 # 智能花盆 🌱
 
-基于 ESP32-C6 的智能花盆系统，具备自动灌溉、Web 蓝牙 / Web 串口远程监控与设置功能。
+基于 ESP32 系列的智能花盆系统，支持 ESP32 / ESP32-C3 / ESP32-C6 / ESP32-S2 / ESP32-S3，具备自动灌溉、Web 蓝牙 / Web 串口远程监控与设置功能。
 
 ## 硬件清单
+
+### ESP32-C6（默认）
 
 | 组件 | 型号 | 引脚 |
 |------|------|------|
@@ -13,8 +15,54 @@
 | | 反转 | GPIO6 |
 | | PWM 调速 | GPIO7 |
 
+### ESP32-C3
+
+| 组件 | 型号 | 引脚 |
+|------|------|------|
+| 主控 | ESP32-C3 | — |
+| 土壤湿度传感器 | 电阻式 | GPIO0 (ADC1_CH0) |
+| 温湿度传感器 | DHT11 | GPIO3 |
+| 水泵驱动 (H桥) | 正转 | GPIO5 |
+| | 反转 | GPIO6 |
+| | PWM 调速 | GPIO7 |
+
+### ESP32-S2（仅串口，无 BLE）
+
+| 组件 | 型号 | 引脚 |
+|------|------|------|
+| 主控 | ESP32-S2 | — |
+| 土壤湿度传感器 | 电阻式 | GPIO1 (ADC1_CH0) |
+| 温湿度传感器 | DHT11 | GPIO3 |
+| 水泵驱动 (H桥) | 正转 | GPIO5 |
+| | 反转 | GPIO6 |
+| | PWM 调速 | GPIO7 |
+
+### ESP32-S3
+
+| 组件 | 型号 | 引脚 |
+|------|------|------|
+| 主控 | ESP32-S3 | — |
+| 土壤湿度传感器 | 电阻式 | GPIO1 (ADC1_CH0) |
+| 温湿度传感器 | DHT11 | GPIO4 |
+| 水泵驱动 (H桥) | 正转 | GPIO5 |
+| | 反转 | GPIO6 |
+| | PWM 调速 | GPIO7 |
+
+### ESP32（经典款）
+
+| 组件 | 型号 | 引脚 |
+|------|------|------|
+| 主控 | ESP32 | — |
+| 土壤湿度传感器 | 电阻式 | GPIO36 (ADC1_CH0, 仅输入) |
+| 温湿度传感器 | DHT11 | GPIO14 |
+| 水泵驱动 (H桥) | 正转 | GPIO25 |
+| | 反转 | GPIO26 |
+| | PWM 调速 | GPIO27 |
+
 ## 功能特性
 
+- **多芯片适配**：固件自动识别 ESP32 / ESP32-C3 / ESP32-C6 / ESP32-S2 / ESP32-S3 芯片型号，条件编译适配引脚；ESP32-S2 不支持 BLE，自动禁用蓝牙功能
+- **串口就绪信号**：固件启动完成后主动发送设备信息帧作为就绪信号，客户端等待该信号后再发送命令，避免 ESP32 复位期间通信超时
 - **自动灌溉**：土壤湿度低于（或高于）阈值时自动浇水，温湿度越界自动停止
 - **BLE 远程控制**：通过 Web 蓝牙连接，实时查看传感器数据、调整灌溉参数
 - **Web Serial 串口控制**：通过 USB 数据线连接，无需蓝牙，数据传输更稳定
@@ -43,9 +91,9 @@
 
 ```
 smart-flower-pot/
-├── esp32-c6/
+├── esp32/
 │   └── smart_flower_pot/            # Arduino IDE 目录（必须与 .ino 同名）
-│       └── smart_flower_pot.ino     # ESP32-C6 固件
+│       └── smart_flower_pot.ino     # ESP32 系列通用固件
 ├── web/
 │   ├── index.html                   # 主页入口
 │   ├── package.json
@@ -109,14 +157,21 @@ smart-flower-pot/
 
 ### 1. 烧录 ESP32 固件
 
-1. 使用 **Arduino IDE** 打开 `esp32-c6/smart_flower_pot/smart_flower_pot.ino`
+1. 使用 **Arduino IDE** 打开 `esp32/smart_flower_pot/smart_flower_pot.ino`
 2. 安装依赖库：
    - `DHT sensor library` by Adafruit（库管理器搜索 "DHT sensor library"）
-   - ESP32 BLE 库（Arduino-ESP32 核心自带）
-3. 选择开发板：`ESP32C6 Dev Module`
+   - ESP32 BLE 库（Arduino-ESP32 核心自带，ESP32-S2 无需安装）
+3. 选择开发板（根据实际芯片选择）：
+   - `ESP32C6 Dev Module`（ESP32-C6）
+   - `ESP32C3 Dev Module`（ESP32-C3）
+   - `ESP32S2 Dev Module`（ESP32-S2）
+   - `ESP32S3 Dev Module`（ESP32-S3）
+   - `ESP32 Dev Module`（ESP32 经典款）
 4. 设置参数：Flash Size ≥ 4MB, Partition Scheme = Default
 5. 编译并上传
 6. 打开**串口监视器**（115200 波特率）观察日志输出
+
+> 固件通过条件编译自动适配芯片型号，无需手动修改代码。选择对应的开发板后，引脚定义和 BLE 支持会自动配置。
 
 ### 2. 启动 Web 前端
 
@@ -137,10 +192,10 @@ npm run dev
 4. 连接成功后头部显示「已连接 · 蓝牙」
 
 #### 串口连接
-1. 使用 USB 数据线将 ESP32-C6 连接到电脑
+1. 使用 USB 数据线将 ESP32 连接到电脑
 2. 关闭 Arduino IDE 串口监视器（避免串口占用）
 3. 点击「🔌 串口连接」按钮
-4. 在弹出的串口列表中选择 ESP32-C6 对应的 COM 端口
+4. 在弹出的串口列表中选择 ESP32 对应的 COM 端口
 5. 连接成功后头部显示「已连接 · 串口」
 
 ### 3. Tauri 客户端（桌面/移动）
@@ -256,7 +311,7 @@ Web 前端为纯静态 SPA（无服务端渲染），采用 **Service Worker Cac
 
 | 层级 | 技术 |
 |------|------|
-| 固件 | Arduino (ESP32-C6), BLE, Preferences/NVS, DHT |
+| 固件 | Arduino (ESP32 系列), BLE, Preferences/NVS, DHT |
 | 通信 | Bluetooth Low Energy 5.0 (128-bit UUID) / USB Serial (115200bps) |
 | Web 前端 | Vue 3.5.34 (Composition API) + Vite 8.0 |
 | Tauri 客户端 | Tauri 2 + Vue 3 + Vite 8（全平台原生应用） |
@@ -287,7 +342,7 @@ Web 前端为纯静态 SPA（无服务端渲染），采用 **Service Worker Cac
 |------|------|----------|------|
 | 0x01 | ESP32 → Web | 6 | 传感器数据（与 BLE 传感器数据结构相同） |
 | 0x02 | Web → ESP32 | 11 | 设置数据（与 BLE 设置数据结构相同） |
-| 0x03 | ESP32 → Web | 变长 | 设备信息 JSON（如 `{"fw":"2.0.0","mac":"...","chip":"ESP32-C6",...}`） |
+| 0x03 | ESP32 → Web | 变长 | 设备信息 JSON（如 `{"fw":"4.3.0","mac":"...","chip":"ESP32-C6",...}`） |
 | 0x04 | Web → ESP32 | 0 | 读取设置请求（ESP32 回传 0x02 类型帧） |
 
 ### 示例：传感器数据帧
@@ -297,6 +352,14 @@ AA 55 01 06 [土壤ADC低] [土壤ADC高] [温度低] [温度高] [湿度] [水�
 ```
 
 > **注意**：串口通信与 BLE 使用完全相同的 11 字节设置和 6 字节传感器数据结构，确保前后端协议一致。
+
+### 串口就绪信号
+
+ESP32 固件启动完成后（`setup()` 末尾），会主动发送一帧设备信息（类型 `0x03`）作为就绪信号。客户端在打开串口后等待该帧（最长 5 秒超时），收到后才发送读取设置等命令，避免 ESP32 复位期间通信超时。
+
+```
+ESP32 上电 → 串口打开 → 固件初始化 → 发送设备信息帧（就绪信号） → 客户端开始通信
+```
 
 ## 许可证
 

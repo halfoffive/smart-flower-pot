@@ -1,23 +1,56 @@
 /*
- * 智能花盆 — ESP32-C6 固件
- * 功能：土壤湿度检测 + DHT11 温湿度 + 水泵自动灌溉 + BLE 远程设置
- * 引脚：土壤 ADC=GPIO0, DHT11=GPIO4, 水泵正转=GPIO5, 反转=GPIO6, PWM=GPIO7
+ * 智能花盆 — ESP32 系列通用固件
+ * 支持：ESP32 / ESP32-C3 / ESP32-C6 / ESP32-S2 / ESP32-S3
+ * 功能：土壤湿度检测 + DHT11 温湿度 + 水泵自动灌溉 + BLE 远程设置（S2 除外）
+ * 引脚：根据芯片型号自动适配，详见下方引脚定义
  */
 
-#include <BLEDevice.h>
-#include <BLEServer.h>
-#include <BLEUtils.h>
-// NimBLE 自动管理 CCCD，无需手动包含 BLE2902
+/* ===================== 芯片适配（引脚定义） ===================== */
+#if defined(CONFIG_IDF_TARGET_ESP32C6)
+  #define SOIL_ADC_PIN 0   // ADC1_CH0
+  #define DHT_PIN 4
+  #define PUMP_POS_PIN 5   // H桥方向A
+  #define PUMP_NEG_PIN 6   // H桥方向B
+  #define PUMP_PWM_PIN 7   // PWM 调速
+#elif defined(CONFIG_IDF_TARGET_ESP32C3)
+  #define SOIL_ADC_PIN 0   // ADC1_CH0
+  #define DHT_PIN 3
+  #define PUMP_POS_PIN 5
+  #define PUMP_NEG_PIN 6
+  #define PUMP_PWM_PIN 7
+#elif defined(CONFIG_IDF_TARGET_ESP32S2)
+  #define SOIL_ADC_PIN 1   // ADC1_CH0
+  #define DHT_PIN 3
+  #define PUMP_POS_PIN 5
+  #define PUMP_NEG_PIN 6
+  #define PUMP_PWM_PIN 7
+  #define NO_BLE 1         // ESP32-S2 不支持 BLE
+#elif defined(CONFIG_IDF_TARGET_ESP32S3)
+  #define SOIL_ADC_PIN 1   // ADC1_CH0
+  #define DHT_PIN 4
+  #define PUMP_POS_PIN 5
+  #define PUMP_NEG_PIN 6
+  #define PUMP_PWM_PIN 7
+#elif defined(CONFIG_IDF_TARGET_ESP32)
+  #define SOIL_ADC_PIN 36  // ADC1_CH0 (VP, 仅输入)
+  #define DHT_PIN 14
+  #define PUMP_POS_PIN 25
+  #define PUMP_NEG_PIN 26
+  #define PUMP_PWM_PIN 27
+#else
+  #error "不支持的 ESP32 变体。支持：ESP32, ESP32-C3, ESP32-C6, ESP32-S2, ESP32-S3"
+#endif
+
+#define DHT_TYPE DHT11
+
+#ifndef NO_BLE
+  #include <BLEDevice.h>
+  #include <BLEServer.h>
+  #include <BLEUtils.h>
+#endif
+
 #include <Preferences.h>
 #include <DHT.h>
-
-/* ===================== 引脚定义 ===================== */
-#define SOIL_ADC_PIN 0  // 土壤湿度传感器（ADC1_CH0）
-#define DHT_PIN 4       // DHT11 数据引脚
-#define DHT_TYPE DHT11
-#define PUMP_POS_PIN 5  // 水泵正转（H桥方向A）
-#define PUMP_NEG_PIN 6  // 水泵反转（H桥方向B）
-#define PUMP_PWM_PIN 7  // 水泵 PWM 调速
 
 /* ===================== PWM 配置 ===================== */
 #define PWM_FREQ 5000     // PWM 频率 5kHz
@@ -81,6 +114,7 @@ enum CompareMode : uint8_t {
 DHT dht(DHT_PIN, DHT_TYPE);  // DHT11 温湿度传感器
 Preferences prefs;           // NVS 闪存存储
 
+#ifndef NO_BLE
 // ── BLE 特征指针 ──
 BLECharacteristic *pSettingsChar = nullptr;    // 设置特征（可读写）
 BLECharacteristic *pSensorChar = nullptr;      // 传感器特征（可读+通知）
@@ -89,6 +123,7 @@ BLECharacteristic *pDeviceInfoChar = nullptr;  // 设备信息特征（只读）
 // ── 连接状态 ──
 bool deviceConnected = false;     // 当前是否有 BLE 客户端连接
 bool oldDeviceConnected = false;  // 上一轮连接状态（用于检测变化）
+#endif
 
 // ── 系统状态 ──
 SystemState systemState = STATE_IDLE;  // 当前系统状态
@@ -151,6 +186,7 @@ void sendDeviceInfoSerial();                                     // 通过串口
 uint8_t calcXOR(uint8_t *data, uint8_t len);                     // 计算 XOR 校验
 
 /* ===================== BLE 回调类实现 ===================== */
+#ifndef NO_BLE
 
 // 设置特征回调：处理网页端的读写请求
 class SettingsCallbacks : public BLECharacteristicCallbacks {
@@ -236,6 +272,7 @@ class ServerCallbacks : public BLEServerCallbacks {
     Serial.println("[BLE] ✗ 客户端已断开，重新开始广播");
   }
 };
+#endif
 
 /* ===================== 设置序列化 / 反序列化 ===================== */
 
@@ -433,7 +470,7 @@ String buildDeviceInfoJson() {
            (uint8_t)(mac >> 8), (uint8_t)(mac));
 
   String json = "{";
-  json += "\"fw\":\"4.2.0\"";
+  json += "\"fw\":\"4.3.0\"";
   json += ",\"mac\":\"";
   json += macStr;
   json += "\"";
@@ -712,8 +749,11 @@ void setup() {
   delay(1000);  // 等待串口稳定
   Serial.println("\n");
   Serial.println("╔══════════════════════════════════════╗");
-  Serial.println("║       智能花盆 ESP32-C6 固件         ║");
-  Serial.println("║       版本: 4.2.0                    ║");
+  Serial.println("║       智能花盆 ESP32 通用固件        ║");
+  Serial.print("║       芯片: ");
+  Serial.print(ESP.getChipModel());
+  Serial.println("                ║");
+  Serial.println("║       版本: 4.3.0                    ║");
   Serial.println("╚══════════════════════════════════════╝");
   Serial.println();
 
@@ -736,6 +776,7 @@ void setup() {
   // ── 从 NVS 闪存加载设置 ──
   loadSettings();
 
+#ifndef NO_BLE
   // ── BLE 初始化 ──
   BLEDevice::init("智能花盆");
 
@@ -757,7 +798,6 @@ void setup() {
   pSensorChar = pService->createCharacteristic(
     SENSOR_CHAR_UUID,
     BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
-  // NimBLE 自动管理 CCCD，无需手动添加 BLE2902 描述符
   uint8_t initSensor[6] = { 0 };
   pSensorChar->setValue(initSensor, 6);
 
@@ -782,10 +822,18 @@ void setup() {
   BLEDevice::startAdvertising();
 
   Serial.println("[BLE] 广播已开启，等待客户端连接...");
+#else
+  Serial.println("[BLE] ESP32-S2 不支持 BLE，仅使用串口通信");
+#endif
 
   // 首次读取传感器，作为基线
   readSensors();
   lastReadTime = millis();
+
+  // ── 发送就绪信号（串口帧），通知客户端固件已启动 ──
+  sendDeviceInfoSerial();
+  Serial.flush();
+  Serial.println("[系统] 固件已就绪，串口通信已启动");
 }
 
 /* ===================== 主循环 loop() ===================== */
@@ -796,27 +844,28 @@ void loop() {
   // ── 处理串口命令（每次循环都检查，确保低延迟响应） ──
   handleSerialCommand();
 
+#ifndef NO_BLE
   // ── 处理 BLE 连接/断开状态变化 ──
   if (deviceConnected && !oldDeviceConnected) {
     oldDeviceConnected = deviceConnected;
     Serial.println("[BLE] ✓ 客户端连接事件");
-    // 连接后立即推送一次传感器数据，消除网页端首次数据等待
     readSensors();
     uint8_t sensorBuffer[6];
     serializeSensorData(sensorBuffer);
     pSensorChar->setValue(sensorBuffer, 6);
     pSensorChar->notify();
-    lastReadTime = millis();       // 重置传感器计时器
-    lastBleNotifyTime = millis();  // 重置 BLE 通知计时器
+    lastReadTime = millis();
+    lastBleNotifyTime = millis();
   }
 
   if (!deviceConnected && oldDeviceConnected) {
     oldDeviceConnected = deviceConnected;
     Serial.println("[BLE] ✗ 客户端断开事件");
-    delay(500);                     // 短暂延时
-    BLEDevice::startAdvertising();  // 重新开始广播
+    delay(500);
+    BLEDevice::startAdvertising();
     Serial.println("[BLE] 广播已恢复");
   }
+#endif
 
   // ── 定时读取传感器 ──
   // 根据系统状态选择不同的检测间隔
@@ -844,7 +893,7 @@ void loop() {
   }
 
   // ── BLE 通知推送（独立定时器，0.5 秒间隔） ──
-  // 与传感器读取频率解耦，BLE 连接时提供更流畅的数据更新体验
+#ifndef NO_BLE
   if (deviceConnected && (now - lastBleNotifyTime >= BLE_NOTIFY_INTERVAL_MS)) {
     lastBleNotifyTime = now;
     uint8_t sensorBuffer[6];
@@ -852,4 +901,5 @@ void loop() {
     pSensorChar->setValue(sensorBuffer, 6);
     pSensorChar->notify();
   }
+#endif
 }

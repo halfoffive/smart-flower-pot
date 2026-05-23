@@ -39,6 +39,7 @@ let listenUnsubscribe = null
 
 let rxBuffer = new Uint8Array(0)
 let pendingResponse = null
+let readyResolve = null
 
 /**
  * 列出可用串口
@@ -67,7 +68,7 @@ export async function connect(path, onSensorData, onDisconnect) {
   try {
     console.log('[Serial/Tauri] 正在打开串口:', path)
 
-    port = new SerialPort({ path, baudRate: BAUD_RATE })
+    port = new SerialPort({ path, baudRate: BAUD_RATE, dataBits: 8, stopBits: 1, parity: 'none' })
     await port.open()
 
     connected = true
@@ -80,6 +81,8 @@ export async function connect(path, onSensorData, onDisconnect) {
       rxBuffer = appendRxBuffer(rxBuffer, data)
       processRxBuffer()
     }, false)
+
+    await waitForReady()
 
     console.log('[Serial/Tauri] ✅ 连接成功')
     return true
@@ -237,6 +240,10 @@ function verifyFrame(frame) {
 }
 
 function handleFrame(type, payload) {
+  if (readyResolve) {
+    readyResolve()
+  }
+
   switch (type) {
     case TYPE_SENSOR:
       if (payload.length === 6) {
@@ -290,6 +297,23 @@ function calculateXOR(data, length) {
 
 async function writeFrame(frame) {
   await port.writeBinary(frame)
+}
+
+function waitForReady(timeoutMs = 5000) {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => {
+      readyResolve = null
+      console.warn('[Serial/Tauri] 等待设备就绪超时，继续连接...')
+      resolve(false)
+    }, timeoutMs)
+
+    readyResolve = () => {
+      clearTimeout(timer)
+      readyResolve = null
+      console.log('[Serial/Tauri] 设备已就绪')
+      resolve(true)
+    }
+  })
 }
 
 function waitForResponse(expectedType, timeoutMs) {

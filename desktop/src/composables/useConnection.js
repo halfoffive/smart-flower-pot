@@ -95,18 +95,36 @@ export function useConnection(showAlert, showToast) {
    * 连接后读取设备数据（设置 + 设备信息）
    */
   async function readDeviceData(conn) {
-    try {
-      const settingsBuf = await conn.readSettings()
-      settings.value = deserializeSettings(settingsBuf)
-    } catch (e) {
-      console.warn('[连接] 读取设置失败:', e)
+    const maxRetries = 2
+
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        const settingsBuf = await conn.readSettings()
+        settings.value = deserializeSettings(settingsBuf)
+        break
+      } catch (e) {
+        if (attempt < maxRetries) {
+          console.warn(`[连接] 读取设置失败 (尝试 ${attempt + 1}/${maxRetries + 1})，重试中...`)
+          await new Promise(resolve => setTimeout(resolve, 1000))
+        } else {
+          console.warn('[连接] 读取设置失败:', e)
+        }
+      }
     }
 
-    try {
-      const infoStr = await conn.readDeviceInfo()
-      deviceInfo.value = parseDeviceInfo(infoStr)
-    } catch (e) {
-      console.warn('[连接] 读取设备信息失败:', e)
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        const infoStr = await conn.readDeviceInfo()
+        deviceInfo.value = parseDeviceInfo(infoStr)
+        break
+      } catch (e) {
+        if (attempt < maxRetries) {
+          console.warn(`[连接] 读取设备信息失败 (尝试 ${attempt + 1}/${maxRetries + 1})，重试中...`)
+          await new Promise(resolve => setTimeout(resolve, 1000))
+        } else {
+          console.warn('[连接] 读取设备信息失败:', e)
+        }
+      }
     }
   }
 

@@ -6,7 +6,7 @@ Three independent packages — no shared build, no monorepo tooling:
 
 - **`web/`** — Vue 3.5.34 + Vite 8 + Tailwind CSS 4 frontend (single-page SPA)
 - **`desktop/`** — Tauri 2 + Vue 3 + Vite 8 desktop/mobile client (Windows/macOS/Linux/Android/iOS)
-- **`esp32-c6/`** — Arduino IDE firmware for ESP32-C6 (C++, BLE, NVS)
+- **`esp32/`** — Arduino IDE firmware for ESP32 series (ESP32 / ESP32-C3 / ESP32-C6 / ESP32-S2 / ESP32-S3, C++, BLE, NVS)
 
 ## Commands
 
@@ -80,7 +80,7 @@ Tailwind CSS 4 uses the `@tailwindcss/vite` plugin — the entry is `@import "ta
 ### PWA
 
 - `public/manifest.json` — installable web app manifest (standalone display, emerald theme)
-- `public/sw.js` — Service Worker with **Cache-First** caching strategy, cache version `flowerpot-v6`
+- `public/sw.js` — Service Worker with **Cache-First** caching strategy, cache version `flowerpot-v7`
   - 所有 HTTP GET 请求缓存优先，15 天有效期
   - 缓存响应注入 `x-sfp-cached-at` 时间戳精确控制 TTL
   - 纯函数 `isCacheFresh()` / `createCacheEntry()` 分离缓存判断逻辑
@@ -106,17 +106,20 @@ The entire web frontend is a fully static SPA (no server-side rendering). Three 
    - After 15 days: SW fetches fresh copy from network, updates cache.
    - Offline refresh: SW returns cached HTML via `ignoreVary: true` matching. If the exact URL isn't cached, falls back to the root page (SPA Fallback).
 
-3. **Cache versioning**: `CACHE_NAME` (`flowerpot-v6`) acts as a deployment-level cache key. Bumping it on deploy causes the SW `activate` event to delete all other caches, ensuring a clean slate without manual clearing.
+3. **Cache versioning**: `CACHE_NAME` (`flowerpot-v7`) acts as a deployment-level cache key. Bumping it on deploy causes the SW `activate` event to delete all other caches, ensuring a clean slate without manual clearing.
 
 ### ESP32 firmware
 
 - **Arduino IDE convention**: `.ino` file **must** live in a folder with the **same base name** (`smart_flower_pot/smart_flower_pot.ino`). Never rename these independently.
+- **Multi-chip support**: Firmware uses conditional compilation (`CONFIG_IDF_TARGET_*` macros) to auto-detect chip model and adapt pin assignments. Supported chips: ESP32, ESP32-C3, ESP32-C6, ESP32-S2, ESP32-S3.
+- **ESP32-S2 has no BLE**: When `CONFIG_IDF_TARGET_ESP32S2` is defined, `NO_BLE` macro is set, disabling all BLE-related code. ESP32-S2 only supports Serial communication.
 - Uses **NimBLE** (Arduino-ESP32 built-in), not the legacy Bluedroid BLE stack. CCCD descriptors are auto-managed — never add `BLE2902` includes.
-- Pin assignments are hardcoded at the top of the `.ino` file. Changing them requires matching changes in the README table and BLE protocol docs.
+- Pin assignments are defined per-chip at the top of the `.ino` file via conditional compilation. Changing them requires matching changes in the README table and BLE protocol docs.
 - `Preferences.h` (NVS) is used for persistent storage. The namespace is `flowerpot`.
 - **Sensor polling intervals**: `IDLE_INTERVAL_MS = 2000` (2s), `WATERING_INTERVAL_MS = 200` (200ms).
 - **BLE notification interval**: `BLE_NOTIFY_INTERVAL_MS = 500` (0.5s) — independent from sensor polling, provides smoother data updates for BLE clients.
 - **Immediate push on connect**: When a BLE client connects, the firmware immediately reads sensors and pushes a notification.
+- **Serial ready signal**: At the end of `setup()`, the firmware sends a device info frame (`0x03`) as a ready signal. Clients wait for this frame (up to 5s timeout) before sending commands, avoiding communication timeout during ESP32 reset.
 
 ### BLE protocol
 
@@ -124,13 +127,13 @@ Binary, Little-Endian, fixed-length buffers. Settings = 11 bytes, sensor data = 
 
 **Save-only flag (legacy)**: Byte [10] (`waterDirection`) = `0xFF` tells firmware to save settings without triggering pump. The firmware restores the previous `waterDirection` value before saving to NVS. **Note**: The current Web UI no longer uses this flag — it sends the actual direction value (0 or 1). The firmware only triggers the pump when speed changes from 0 to non-zero, so saving settings with actual direction values won't accidentally start the pump. The 0xFF flag is retained for backward compatibility with older Web UI versions.
 
-**Device info**: JSON format `{"fw":"2.0.0","mac":"XX:XX:XX:XX:XX:XX","chip":"ESP32-C6","rev":1,"flash":4096,"heap":12345}`. Parsed on the web side by `parseDeviceInfo()`.
+**Device info**: JSON format `{"fw":"4.3.0","mac":"XX:XX:XX:XX:XX:XX","chip":"ESP32-C6","rev":1,"flash":4096,"heap":12345}`. Parsed on the web side by `parseDeviceInfo()`.
 
 ### Serial protocol
 
 Binary framed protocol over USB Serial (115200 baud). Frame format: `0xAA 0x55` header + type byte + length byte + payload + XOR checksum. Types: `0x01` sensor data, `0x02` settings, `0x03` device info, `0x04` read-settings request. The firmware parses frames in `loop()` via `handleSerialCommand()` and sends sensor data after each read. Settings/sensor payloads use the exact same 11/6 byte layouts as BLE.
 
-- `web/src/lib/serial.js` — Web Serial API wrapper. Exports `connect()`, `connectWithPort()`, `disconnect()`, `readSettings()`, `writeSettings()`, `readDeviceInfo()`, `isConnected()`, `getPortInfo()`. API surface mirrors `ble.js` so `useConnection.js` can switch between them transparently. `connect()` requires user gesture (calls `requestPort()`); `connectWithPort()` accepts an already-granted port for URL auto-connect. Both share `openAndStartReadLoop()` internal function. `getPortInfo()` returns `SerialPortInfo` (USB VID/PID) for URL query and DeviceInfo display. All data-processing functions are pure functions with no side effects. Buffer operations use immutable updates.
+- `web/src/lib/serial.js` — Web Serial API wrapper. Exports `connect()`, `connectWithPort()`, `disconnect()`, `readSettings()`, `writeSettings()`, `readDeviceInfo()`, `isConnected()`, `getPortInfo()`. API surface mirrors `ble.js` so `useConnection.js` can switch between them transparently. `connect()` requires user gesture (calls `requestPort()`); `connectWithPort()` accepts an already-granted port for URL auto-connect. Both share `openAndStartReadLoop()` internal function. `getPortInfo()` returns `SerialPortInfo` (USB VID/PID) for URL query and DeviceInfo display. All data-processing functions are pure functions with no side effects. Buffer operations use immutable updates. **Serial ready signal**: `openAndStartReadLoop()` calls `waitForReady()` after opening the port, which waits for the first frame from the device (up to 5s timeout) before proceeding. USB VID filter list includes CP210x (0x10c4), CH340 (0x1a86), Espressif native USB (0x303a), and FTDI (0x0403).
 - Serial and BLE can operate simultaneously; the firmware pushes sensor data to both channels after each sensor read.
 
 ### Code conventions
@@ -148,11 +151,13 @@ Binary framed protocol over USB Serial (115200 baud). Frame format: `0xAA 0x55` 
 - When using Serial mode, close Arduino IDE's Serial Monitor first to avoid port conflicts.
 - The firmware's `MAX_WATERING_MS` is **5000 (5 seconds)**, not 60 seconds. Trust the code.
 - `vite.config.js` uses CommonJS `path` module via `import` — Vite handles this, but do not convert to `import.meta.url` without verifying the build still resolves paths correctly.
-- **Cache version MUST be bumped on EVERY deploy that changes any file**: `web/public/sw.js`'s `CACHE_NAME` (currently `flowerpot-v6`) must be incremented every time anything changes (HTML/JS/CSS/images/SW logic), or existing users will be served stale cached files until the 15-day TTL expires. The SW `activate` event only deletes caches whose name differs from the current `CACHE_NAME`. Forgetting this is the #1 cause of "my fix didn't take effect" bugs.
+- **Cache version MUST be bumped on EVERY deploy that changes any file**: `web/public/sw.js`'s `CACHE_NAME` (currently `flowerpot-v7`) must be incremented every time anything changes (HTML/JS/CSS/images/SW logic), or existing users will be served stale cached files until the 15-day TTL expires. The SW `activate` event only deletes caches whose name differs from the current `CACHE_NAME`. Forgetting this is the #1 cause of "my fix didn't take effect" bugs.
 - `assetsInlineLimit: 0` in `vite.config.js` means **no base64 inlining** — every asset is a separate file. This is intentional for SW cache granularity. If performance testing shows excessive HTTP requests, consider raising the limit, but always test SW caching behavior after the change.
 - There is no CI, no pre-commit hooks, and no automated testing of any kind.
 - **waterDirection = 0xFF** is a legacy protocol control flag, not an actual direction. The current Web UI sends actual direction values (0 or 1). The firmware only triggers the pump when speed changes from 0 to non-zero, so saving direction changes won't accidentally start the pump. The 0xFF flag is retained for backward compatibility.
 - **Connection vs data reading are separated**: `useConnection.js` sets `connected = true` immediately after the transport-level connection succeeds. `readSettings()` and `readDeviceInfo()` failures are non-fatal — they log warnings but don't tear down the connection or show error alerts.
+- **Serial ready signal**: When opening a serial connection, the client calls `waitForReady()` which waits for the first frame from the device (up to 5s timeout). This ensures the ESP32 firmware has finished initializing before the client sends commands. If the ready signal times out, the connection proceeds anyway (graceful degradation).
+- **Read retry logic**: `readDeviceData()` in both web and desktop `useConnection.js` retries `readSettings()` and `readDeviceInfo()` up to 2 times with 1-second intervals between attempts, improving reliability on first connection.
 - **BLE auto-reconnect requires scanning**: btleplug requires devices to be discovered via scanning before connecting. `autoReconnect()` and `tryQuickBleConnect()` both use `scanAndConnect()` which scans first, then connects. Direct `connect(address)` without prior scanning will fail.
 - **BLE scan is stream-based**: `startScan` from `@mnlphlp/plugin-blec` returns immediately — the Rust backend spawns a tokio task that scans in 200ms intervals and pushes devices via Tauri Channel. The `scanDevices()` function uses a callback pattern (`onDevice`) rather than returning an array, because the array would always be empty at the time `startScan` resolves.
 

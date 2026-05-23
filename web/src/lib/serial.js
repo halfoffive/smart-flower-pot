@@ -42,6 +42,7 @@ let userInitiatedDisconnect = false
 
 let rxBuffer = new Uint8Array(0)
 let pendingResponse = null
+let readyResolve = null
 
 /**
  * 用户手动连接：弹出串口选择器（需要用户手势）
@@ -61,6 +62,8 @@ export async function connect(onSensorData, onDisconnect) {
       filters: [
         { usbVendorId: 0x10c4 },
         { usbVendorId: 0x1a86 },
+        { usbVendorId: 0x303a },
+        { usbVendorId: 0x0403 },
       ],
     })
 
@@ -120,6 +123,25 @@ async function openAndStartReadLoop() {
 
   writer = port.writable.getWriter()
   readLoopDone = readLoop()
+
+  await waitForReady()
+}
+
+function waitForReady(timeoutMs = 5000) {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => {
+      readyResolve = null
+      console.warn('[Serial] 等待设备就绪超时，继续连接...')
+      resolve(false)
+    }, timeoutMs)
+
+    readyResolve = () => {
+      clearTimeout(timer)
+      readyResolve = null
+      console.log('[Serial] 设备已就绪')
+      resolve(true)
+    }
+  })
 }
 
 /**
@@ -276,6 +298,10 @@ function verifyFrame(frame) {
 }
 
 function handleFrame(type, payload) {
+  if (readyResolve) {
+    readyResolve()
+  }
+
   switch (type) {
     case TYPE_SENSOR:
       if (payload.length === 6) {

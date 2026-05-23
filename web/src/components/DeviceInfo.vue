@@ -58,7 +58,7 @@ const infoItems = computed(() => {
 </script>
 
 <template>
-  <div v-if="connection.connected.value" class="sfp-card rounded-2xl p-4 shadow-lg animate-card-in" style="animation-delay: 550ms">
+  <div v-if="connected" class="sfp-card rounded-2xl p-4 shadow-lg animate-card-in" style="animation-delay: 550ms">
     <div class="flex items-center gap-2 mb-3">
       <img :src="imgPlant" alt="设备信息" class="w-5 h-5" />
       <h3 class="text-sm font-bold text-[rgb(var(--sfp-text-primary))]">设备信息</h3>

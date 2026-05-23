@@ -7,7 +7,7 @@
  * - theme: 主题管理（浅色/深色/自动三态）
  */
 
-import { provide, onMounted } from 'vue'
+import { provide, onMounted, computed } from 'vue'
 import { useConnection } from './composables/useConnection.js'
 import { useTheme } from './composables/useTheme.js'
 import { useToast } from './composables/useToast.js'
@@ -24,6 +24,18 @@ const theme = useTheme()
 
 provide('connection', connection)
 provide('theme', theme)
+
+const deepLink = computed(() => {
+  if (!connection.connected.value) return 'smart-flower-pot://connect'
+  if (connection.connectionMode.value === 'ble' && connection.deviceInfo.value?.mac) {
+    return `smart-flower-pot://connect?mode=ble&mac=${connection.deviceInfo.value.mac}`
+  }
+  return 'smart-flower-pot://connect'
+})
+
+const openInApp = () => {
+  window.location.href = deepLink.value
+}
 
 onMounted(() => {
   theme.initTheme()
@@ -55,5 +67,14 @@ onMounted(() => {
     <template v-else-if="!connection.connected.value">
       <SettingsPanel />
     </template>
+
+    <div class="flex justify-center pt-2 pb-4">
+      <button
+        @click="openInApp"
+        class="open-in-app-btn"
+      >
+        📱 在 App 中打开
+      </button>
+    </div>
   </div>
 </template>

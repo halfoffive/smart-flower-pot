@@ -360,3 +360,25 @@ html {
 @keyframes sfp-spin {
   to { transform: rotate(360deg); }
 }
+
+.open-in-app-btn {
+  background: rgb(var(--sfp-bg-card));
+  border: 1px solid rgb(var(--sfp-border));
+  color: rgb(var(--sfp-text-secondary));
+  font-size: 0.75rem;
+  padding: 6px 16px;
+  border-radius: 9999px;
+  cursor: pointer;
+  transition: background 150ms ease, border-color 150ms ease, color 150ms ease;
+  user-select: none;
+}
+
+.open-in-app-btn:hover {
+  background: rgb(var(--sfp-bg-hover));
+  border-color: rgb(var(--sfp-accent) / 0.4);
+  color: rgb(var(--sfp-text-primary));
+}
+
+.open-in-app-btn:active {
+  transform: scale(0.97);
+}

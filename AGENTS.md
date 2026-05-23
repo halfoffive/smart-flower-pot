@@ -80,7 +80,7 @@ Tailwind CSS 4 uses the `@tailwindcss/vite` plugin — the entry is `@import "ta
 ### PWA
 
 - `public/manifest.json` — installable web app manifest (standalone display, emerald theme)
-- `public/sw.js` — Service Worker with **Cache-First** caching strategy, cache version `flowerpot-v5`
+- `public/sw.js` — Service Worker with **Cache-First** caching strategy, cache version `flowerpot-v6`
   - 所有 HTTP GET 请求缓存优先，15 天有效期
   - 缓存响应注入 `x-sfp-cached-at` 时间戳精确控制 TTL
   - 纯函数 `isCacheFresh()` / `createCacheEntry()` 分离缓存判断逻辑
@@ -106,7 +106,7 @@ The entire web frontend is a fully static SPA (no server-side rendering). Three 
    - After 15 days: SW fetches fresh copy from network, updates cache.
    - Offline refresh: SW returns cached HTML via `ignoreVary: true` matching. If the exact URL isn't cached, falls back to the root page (SPA Fallback).
 
-3. **Cache versioning**: `CACHE_NAME` (`flowerpot-v5`) acts as a deployment-level cache key. Bumping it on deploy causes the SW `activate` event to delete all other caches, ensuring a clean slate without manual clearing.
+3. **Cache versioning**: `CACHE_NAME` (`flowerpot-v6`) acts as a deployment-level cache key. Bumping it on deploy causes the SW `activate` event to delete all other caches, ensuring a clean slate without manual clearing.
 
 ### ESP32 firmware
 
@@ -148,7 +148,7 @@ Binary framed protocol over USB Serial (115200 baud). Frame format: `0xAA 0x55` 
 - When using Serial mode, close Arduino IDE's Serial Monitor first to avoid port conflicts.
 - The firmware's `MAX_WATERING_MS` is **5000 (5 seconds)**, not 60 seconds. Trust the code.
 - `vite.config.js` uses CommonJS `path` module via `import` — Vite handles this, but do not convert to `import.meta.url` without verifying the build still resolves paths correctly.
-- **Cache version MUST be bumped on EVERY deploy that changes any file**: `web/public/sw.js`'s `CACHE_NAME` (currently `flowerpot-v5`) must be incremented every time anything changes (HTML/JS/CSS/images/SW logic), or existing users will be served stale cached files until the 15-day TTL expires. The SW `activate` event only deletes caches whose name differs from the current `CACHE_NAME`. Forgetting this is the #1 cause of "my fix didn't take effect" bugs.
+- **Cache version MUST be bumped on EVERY deploy that changes any file**: `web/public/sw.js`'s `CACHE_NAME` (currently `flowerpot-v6`) must be incremented every time anything changes (HTML/JS/CSS/images/SW logic), or existing users will be served stale cached files until the 15-day TTL expires. The SW `activate` event only deletes caches whose name differs from the current `CACHE_NAME`. Forgetting this is the #1 cause of "my fix didn't take effect" bugs.
 - `assetsInlineLimit: 0` in `vite.config.js` means **no base64 inlining** — every asset is a separate file. This is intentional for SW cache granularity. If performance testing shows excessive HTTP requests, consider raising the limit, but always test SW caching behavior after the change.
 - There is no CI, no pre-commit hooks, and no automated testing of any kind.
 - **waterDirection = 0xFF** is a legacy protocol control flag, not an actual direction. The current Web UI sends actual direction values (0 or 1). The firmware only triggers the pump when speed changes from 0 to non-zero, so saving direction changes won't accidentally start the pump. The 0xFF flag is retained for backward compatibility.
@@ -183,7 +183,8 @@ Binary framed protocol over USB Serial (115200 baud). Frame format: `0xAA 0x55` 
 **Deep Link**:
 - 桌面 URL Scheme: `smart-flower-pot://connect?mode=ble&mac=XX:XX:XX:XX:XX:XX`
 - 移动端: Universal Links (iOS) / App Links (Android)，需配置 `.well-known/` 服务器文件
-- 前端通过 `onOpenUrl()` 监听，解析 URL 参数后触发 `autoConnectFromUrl()`
+- 前端通过 `getCurrent()` 获取冷启动 URL（应用未运行时点击链接启动），`onOpenUrl()` 监听热启动（应用运行中收到链接）
+- 冷启动 URL 存在时跳过 `autoReconnect()`，避免同时触发两个连接
 
 **Auto-reconnect**:
 - 使用 `tauri-plugin-store` 持久化 `{ mode, address/path }` 到 `connection-store.json`
@@ -210,7 +211,7 @@ Binary framed protocol over USB Serial (115200 baud). Frame format: `0xAA 0x55` 
 
 **GitHub Actions** (`.github/workflows/build-tauri.yml`):
 - 手动触发 `workflow_dispatch`
-- 构建矩阵：macOS (Arm + Intel)、Ubuntu、Windows、Android APK、iOS
+- 构建矩阵：macOS (Arm + Intel)、Ubuntu、Windows、Android APK
 - 使用 `tauri-apps/tauri-action@v0`
 - 发布到 GitHub Release（预发布，非草稿）
 - Android 签名需要 GitHub Secrets: `ANDROID_KEY_ALIAS`, `ANDROID_KEY_BASE64`, `ANDROID_KEY_PASSWORD`

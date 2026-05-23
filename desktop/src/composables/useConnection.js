@@ -21,7 +21,7 @@ import { ref, readonly } from 'vue'
 import * as ble from '../lib/tauri-ble.js'
 import * as serial from '../lib/tauri-serial.js'
 import { load, Store } from '@tauri-apps/plugin-store'
-import { onOpenUrl } from '@tauri-apps/plugin-deep-link'
+import { onOpenUrl, getCurrent } from '@tauri-apps/plugin-deep-link'
 import {
   serializeSettings,
   deserializeSettings,
@@ -344,9 +344,25 @@ export function useConnection(showAlert, showToast) {
 
   /**
    * 注册 Deep Link 监听器
-   * 应用运行中收到深度链接时自动连接
+   * 冷启动：先调用 getCurrent() 获取启动 URL 并自动连接
+   * 热启动：注册 onOpenUrl 监听器，应用运行中收到深度链接时自动连接
+   *
+   * @returns {Promise<boolean>} 是否有冷启动 URL
    */
   async function setupDeepLink() {
+    let hasColdStartUrl = false
+
+    try {
+      const startupUrls = await getCurrent()
+      if (startupUrls && startupUrls.length > 0) {
+        hasColdStartUrl = true
+        console.log('[Deep Link] 冷启动 URL:', startupUrls[0])
+        autoConnectFromUrl(startupUrls[0])
+      }
+    } catch (e) {
+      console.warn('[Deep Link] 获取冷启动 URL 失败:', e)
+    }
+
     try {
       await onOpenUrl((urls) => {
         if (urls && urls.length > 0) {
@@ -357,6 +373,8 @@ export function useConnection(showAlert, showToast) {
     } catch (e) {
       console.warn('[Deep Link] 监听器注册失败:', e)
     }
+
+    return hasColdStartUrl
   }
 
   /**

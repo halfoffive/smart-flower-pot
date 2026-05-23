@@ -1,5 +1,19 @@
 # 更新日志
 
+## [4.2.0] — 2026-05-23
+
+### 新增
+- **Deep Link 冷启动修复**：`setupDeepLink()` 新增 `getCurrent()` 调用，应用未运行时点击深度链接可正确自动连接
+  - 冷启动 URL 存在时跳过 `autoReconnect()`，避免同时触发两个连接
+- **Web 端"在 App 中打开"按钮**：页面底部添加按钮，点击后尝试打开 `smart-flower-pot://` 深度链接启动桌面客户端
+  - BLE 已连接时链接包含 MAC 地址，串口模式仅包含基础链接
+- **Web 端 GitHub 链接**：AppHeader 添加 GitHub 图标链接，指向 `https://github.com/halfoffive/smart-flower-pot`
+- **Web 端软件版本号显示**：DeviceInfo 面板显示当前软件版本号（从 package.json 读取）
+
+### 变更
+- **应用名称**：`productName` 从 "SmartFlowerPot" 改为 "Smart Flower Pot Control Software"
+- **版本号统一**：web/desktop/tauri/ESP32 固件版本号统一为 4.2.0（与 CHANGELOG 一致）
+
 ## [4.1.0] — 2026-05-23
 
 ### 新增

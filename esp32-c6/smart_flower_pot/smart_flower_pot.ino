@@ -433,7 +433,7 @@ String buildDeviceInfoJson() {
            (uint8_t)(mac >> 8),  (uint8_t)(mac));
 
   String json = "{";
-  json += "\"fw\":\"2.0.0\"";
+  json += "\"fw\":\"4.2.0\"";
   json += ",\"mac\":\"";
   json += macStr;
   json += "\"";
@@ -708,7 +708,7 @@ void setup() {
   Serial.println("\n");
   Serial.println("╔══════════════════════════════════════╗");
   Serial.println("║       智能花盆 ESP32-C6 固件         ║");
-  Serial.println("║       版本: 2.0.0                    ║");
+  Serial.println("║       版本: 4.2.0                    ║");
   Serial.println("╚══════════════════════════════════════╝");
   Serial.println();
 

@@ -35,6 +35,9 @@
 - **BLE 高频推送**：BLE 连接时通知频率 0.5 秒，与传感器读取频率解耦
 - **方向保存与水泵解耦**：保存设置时发送实际方向值，固件仅在速度从 0 变为非 0 时触发水泵，保存设置不会误触发
 - **加载状态反馈**：连接中显示进度条和旋转器，等待传感器数据显示进度条，保存设置时按钮显示加载状态
+- **Deep Link 冷启动**：应用未运行时点击 `smart-flower-pot://connect?mode=ble&mac=XX:XX:XX:XX:XX:XX` 可启动应用并自动连接设备
+- **Web 端"在 App 中打开"**：网页底部按钮可一键启动桌面客户端并自动连接当前设备
+- **GitHub 链接**：Web 端顶部栏显示 GitHub 仓库链接
 
 ## 目录结构
 
@@ -155,7 +158,7 @@ bun run tauri dev
 - **原生串口连接**：应用内列出可用串口并选择连接
 - **自动重连**：启动时自动扫描并连接上次 BLE 设备，串口直接重连
 - **BLE 快速重连**：点击蓝牙连接时优先连接上次设备，失败后回退扫描
-- **Deep Link**：通过 `smart-flower-pot://connect?mode=ble&mac=XX:XX:XX:XX:XX:XX` 启动并自动连接
+- **Deep Link**：通过 `smart-flower-pot://connect?mode=ble&mac=XX:XX:XX:XX:XX:XX` 启动并自动连接（支持冷启动和热启动）
 - **跨平台**：一套代码适配所有平台
 
 #### 构建发布版本
@@ -261,7 +264,7 @@ Web 前端为纯静态 SPA（无服务端渲染），采用 **Service Worker Cac
 | 主题系统 | CSS 自定义属性 + localStorage 持久化（浅色/深色/自动） |
 | PWA | Manifest + Service Worker（Cache-First 策略，15天 TTL + 离线降级） |
 | 浏览器 API | Web Bluetooth API / Web Serial API |
-| Tauri 插件 | blec (BLE, 含 scanAndConnect 自动重连) / serialplugin (串口) / deep-link (深度链接) / store (持久化) |
+| Tauri 插件 | blec (BLE, 含 scanAndConnect 自动重连) / serialplugin (串口) / deep-link (深度链接，含冷启动 getCurrent) / store (持久化) |
 
 
 ## 串口通信协议

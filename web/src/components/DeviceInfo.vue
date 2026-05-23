@@ -5,11 +5,12 @@
 import { inject, computed } from 'vue'
 import * as serial from '../lib/serial.js'
 import { publicPath } from '../lib/publicPath.js'
+import { version } from '../../package.json'
 
 /** 静态资源路径前缀（兼容域名根目录和子目录部署） */
 const imgPlant = publicPath + 'potted_plant_3d.png'
 
-const { deviceInfo, connectionMode } = inject('connection')
+const { connected, deviceInfo, connectionMode } = inject('connection')
 
 const hasInfo = computed(() => deviceInfo.value != null)
 
@@ -27,6 +28,11 @@ const serialUsbInfo = computed(() => {
 const infoItems = computed(() => {
   const info = deviceInfo.value
   const items = []
+
+  items.push({
+    label: '软件版本',
+    value: version,
+  })
 
   items.push({
     label: '连接方式',
@@ -52,7 +58,7 @@ const infoItems = computed(() => {
 </script>
 
 <template>
-  <div v-if="hasInfo" class="sfp-card rounded-2xl p-4 shadow-lg animate-card-in" style="animation-delay: 550ms">
+  <div v-if="connection.connected.value" class="sfp-card rounded-2xl p-4 shadow-lg animate-card-in" style="animation-delay: 550ms">
     <div class="flex items-center gap-2 mb-3">
       <img :src="imgPlant" alt="设备信息" class="w-5 h-5" />
       <h3 class="text-sm font-bold text-[rgb(var(--sfp-text-primary))]">设备信息</h3>

@@ -29,8 +29,11 @@ provide('theme', theme)
 onMounted(async () => {
   theme.initTheme()
 
-  await connection.setupDeepLink()
-  await connection.autoReconnect()
+  await connection.setupDeepLink().then((hasDeepLink) => {
+    if (!hasDeepLink) {
+      connection.autoReconnect()
+    }
+  })
 
   const splash = document.getElementById('splash')
   if (splash) {

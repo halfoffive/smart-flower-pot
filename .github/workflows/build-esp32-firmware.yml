@@ -60,6 +60,9 @@ jobs:
       - name: 安装 ESP32 核心
         run: arduino-cli core install esp32:esp32
 
+      - name: 安装依赖库
+        run: arduino-cli lib install "DHT sensor library"
+
       - name: 编译固件 — ${{ matrix.name }}
         run: |
           arduino-cli compile \

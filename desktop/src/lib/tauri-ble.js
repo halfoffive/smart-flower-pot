@@ -192,8 +192,8 @@ export async function scanAndConnect(address, onSensorData, onDisconnect, timeou
   try {
     await startScan((devices) => {
       for (const device of devices) {
-        if (device.address === address) {
-          console.log('[BLE/Tauri] 扫描到目标设备:', device.name || '未知', address)
+        if (device.address.toLowerCase() === address.toLowerCase()) {
+          console.log('[BLE/Tauri] 扫描到目标设备:', device.name || '未知', device.address)
           found = true
           return
         }

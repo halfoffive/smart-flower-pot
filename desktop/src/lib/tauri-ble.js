@@ -179,18 +179,6 @@ export async function stopScanDevices() {
 export async function scanAndConnect(address, onSensorData, onDisconnect, timeoutMs = 10000) {
   console.log('[BLE/Tauri] 扫描并连接:', address, '超时:', timeoutMs, 'ms')
 
-  try {
-    const adapterState = await getAdapterState()
-    if (adapterState === 'Off') {
-      console.warn('[BLE/Tauri] 蓝牙适配器已关闭，无法自动重连')
-      return false
-    }
-  } catch (_) { /* Windows 上可忽略 */ }
-
-  try {
-    await checkPermissions(true)
-  } catch (_) { /* Windows 上可忽略 */ }
-
   const addressLower = address.toLowerCase()
 
   const found = await new Promise((resolve) => {
@@ -199,20 +187,19 @@ export async function scanAndConnect(address, onSensorData, onDisconnect, timeou
       if (!settled) {
         settled = true
         console.warn('[BLE/Tauri] 扫描超时，未发现目标设备:', address)
+        stopScanDevices()
         resolve(false)
       }
     }, timeoutMs)
 
-    startScan((devices) => {
+    scanDevices((device) => {
       if (settled) return
-      for (const device of devices) {
-        if (device.address.toLowerCase() === addressLower) {
-          console.log('[BLE/Tauri] 扫描到目标设备:', device.name || '未知', device.address)
-          settled = true
-          clearTimeout(timer)
-          resolve(true)
-          return
-        }
+      if (device.address.toLowerCase() === addressLower) {
+        console.log('[BLE/Tauri] 扫描到目标设备:', device.name || '未知', device.address)
+        settled = true
+        clearTimeout(timer)
+        stopScanDevices()
+        resolve(true)
       }
     }, timeoutMs).catch((e) => {
       if (!settled) {
@@ -224,12 +211,7 @@ export async function scanAndConnect(address, onSensorData, onDisconnect, timeou
     })
   })
 
-  if (!found) {
-    try { await stopScan() } catch (_) { /* 忽略 */ }
-    return false
-  }
-
-  try { await stopScan() } catch (_) { /* 忽略 */ }
+  if (!found) return false
 
   try {
     await connect(address, onSensorData, onDisconnect)

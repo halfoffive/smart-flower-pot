@@ -72,8 +72,18 @@ export async function connect(path, onSensorData, onDisconnect) {
   try {
     console.log('[Serial/Tauri] 正在打开串口:', path)
 
-    port = new SerialPort({ path, baudRate: BAUD_RATE, dataBits: 8, stopBits: 1, parity: 'none' })
+    port = new SerialPort({ path, baudRate: BAUD_RATE, dataBits: 'Eight', stopBits: 'One', parity: 'None' })
     await port.open()
+
+    port.disconnected(() => {
+      console.warn('[Serial/Tauri] ⚠ 串口设备已断开')
+      if (!userInitiatedDisconnect) {
+        connected = false
+        onDisconnectCb?.()
+      }
+    }).catch((e) => {
+      console.warn('[Serial/Tauri] 注册断开监听失败:', e)
+    })
 
     connected = true
     console.log('[Serial/Tauri] 串口已打开，波特率:', BAUD_RATE)

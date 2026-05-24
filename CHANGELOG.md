@@ -1,5 +1,27 @@
 # 更新日志
 
+## [4.3.4] — 2026-05-23
+
+### 修复
+
+- **Deep Link BLE 首次连接 100% 失败**：`scanAndConnect` 直接调用 `startScan` 但扫描回调未正确触发，导致 deep link 启动后瞬间返回失败
+  - 修复：`scanAndConnect` 改为复用 `scanDevices`（已验证可用的扫描流程），在回调中匹配目标地址
+  - 地址匹配使用 `toLowerCase()` 忽略大小写
+
+- **串口无法连接设备**：`new SerialPort({ dataBits: 8, stopBits: 1, parity: 'none' })` 参数格式错误
+  - `tauri-plugin-serialplugin-api` 期望枚举字符串值，传入数字/小写字符串导致 Rust 后端无法识别
+  - 修复：`dataBits: 'Eight'`, `stopBits: 'One'`, `parity: 'None'`
+
+- **串口断开连接无响应**：`onDisconnectCb` 赋值但从未被调用
+  - 修复：注册 `port.disconnected()` 回调，设备断开时正确触发断开逻辑
+
+### 修改文件
+
+- `desktop/src/lib/tauri-ble.js` — scanAndConnect 复用 scanDevices 扫描逻辑
+- `desktop/src/lib/tauri-serial.js` — SerialPort 构造参数修复 + 断开监听
+- `web/public/sw.js` — v9 → v10
+- version bump: web/desktop/tauri → 4.3.4
+
 ## [4.3.3] — 2026-05-23
 
 ### 修复

@@ -166,6 +166,10 @@ export async function stopScanDevices() {
  * btleplug 要求先扫描发现设备后才能连接，启动时直接 connect 必定失败
  * 本函数先扫描，发现目标地址后立即停止扫描并连接
  *
+ * 关键：startScan 是流式 API，invoke 立即返回，设备通过 Channel 异步推送
+ * 因此不能用 await startScan() 阻塞等待扫描结果
+ * 改用 Promise + setTimeout 实现真正的等待逻辑
+ *
  * @param {string} address - 目标设备地址
  * @param {function} onSensorData - 传感器数据回调
  * @param {function} onDisconnect - 断开连接回调
@@ -187,25 +191,40 @@ export async function scanAndConnect(address, onSensorData, onDisconnect, timeou
     await checkPermissions(true)
   } catch (_) { /* Windows 上可忽略 */ }
 
-  let found = false
+  const addressLower = address.toLowerCase()
 
-  try {
-    await startScan((devices) => {
+  const found = await new Promise((resolve) => {
+    let settled = false
+    const timer = setTimeout(() => {
+      if (!settled) {
+        settled = true
+        console.warn('[BLE/Tauri] 扫描超时，未发现目标设备:', address)
+        resolve(false)
+      }
+    }, timeoutMs)
+
+    startScan((devices) => {
+      if (settled) return
       for (const device of devices) {
-        if (device.address.toLowerCase() === address.toLowerCase()) {
+        if (device.address.toLowerCase() === addressLower) {
           console.log('[BLE/Tauri] 扫描到目标设备:', device.name || '未知', device.address)
-          found = true
+          settled = true
+          clearTimeout(timer)
+          resolve(true)
           return
         }
       }
-    }, timeoutMs)
-  } catch (e) {
-    console.error('[BLE/Tauri] 扫描异常:', e)
-    return false
-  }
+    }, timeoutMs).catch((e) => {
+      if (!settled) {
+        settled = true
+        clearTimeout(timer)
+        console.error('[BLE/Tauri] 扫描异常:', e)
+        resolve(false)
+      }
+    })
+  })
 
   if (!found) {
-    console.warn('[BLE/Tauri] 扫描超时，未发现目标设备:', address)
     try { await stopScan() } catch (_) { /* 忽略 */ }
     return false
   }

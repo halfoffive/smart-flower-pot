@@ -329,7 +329,28 @@ export function useConnection(showAlert, showToast) {
       if (mode === 'ble') {
         const address = params.get('mac') || params.get('address')
         if (address) {
-          await connectBle(address)
+          connecting.value = true
+          const ok = await ble.scanAndConnect(address, onSensorData, onDisconnect)
+          if (ok) {
+            connected.value = true
+            connectionMode.value = 'ble'
+            connecting.value = false
+            readDeviceData(ble).then(() => {
+              saveLastConnection({ mode: 'ble', address })
+              console.log('[Deep Link] BLE 连接成功:', address)
+            }).catch((e) => {
+              console.warn('[Deep Link] BLE 连接后读取数据失败:', e)
+              saveLastConnection({ mode: 'ble', address })
+            })
+          } else {
+            connecting.value = false
+            showAlert(
+              '1. ESP32-C6 已上电且运行\n' +
+              '2. 设备蓝牙已开启\n' +
+              '3. 设备未被其他程序占用',
+              '蓝牙连接失败'
+            )
+          }
         }
       } else if (mode === 'serial') {
         const path = params.get('path')

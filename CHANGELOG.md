@@ -1,5 +1,26 @@
 # 更新日志
 
+## [4.3.3] — 2026-05-23
+
+### 修复
+
+- **Deep Link BLE 自动连接失败**：`autoConnectFromUrl` 中 BLE 模式直接调用 `connect()` 跳过扫描，btleplug 要求先扫描才能连接，导致深链包含正确 MAC 地址也无法连接
+  - 修复：改为使用 `scanAndConnect()`（先扫描再连接），与 `autoReconnect()`/`tryQuickBleConnect()` 保持一致
+  - 扫描超时（10 秒）后显示错误提示
+
+### 新增
+
+- **ESP32 多芯片固件自动构建**：新增 `.github/workflows/build-esp32-firmware.yml`
+  - 手动触发 `workflow_dispatch`，使用 arduino-cli 为 5 种芯片（ESP32/C3/C6/S2/S3）并行编译固件
+  - 构建产物（.bin / .elf）按芯片名称上传为独立 artifact
+
+### 修改文件
+
+- `desktop/src/composables/useConnection.js` — autoConnectFromUrl BLE 分支改用 scanAndConnect
+- `.github/workflows/build-esp32-firmware.yml` — 新增
+- `web/public/sw.js` — v8 → v9
+- version bump: web/desktop/tauri → 4.3.3
+
 ## [4.3.2] — 2026-05-23
 
 ### 紧急修复

@@ -1,0 +1,77 @@
+# ============================================================
+# ESP32 固件构建
+#
+# 触发条件：手动运行 workflow_dispatch
+#
+# 构建策略：
+# - 使用 arduino-cli 为 5 种芯片编译固件
+# - 每种芯片独立构建，互不影响（fail-fast: false）
+# - 构建产物（.bin / .elf）按芯片名称上传为独立 artifact
+#
+# 支持的芯片：
+# - ESP32 (esp32:esp32:esp32)
+# - ESP32-C3 (esp32:esp32:esp32c3)
+# - ESP32-C6 (esp32:esp32:esp32c6)
+# - ESP32-S2 (esp32:esp32:esp32s2)
+# - ESP32-S3 (esp32:esp32:esp32s3)
+# ============================================================
+
+name: Build ESP32 Firmware
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: esp32-build
+  cancel-in-progress: true
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  build:
+    permissions:
+      contents: read
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - fqbn: esp32:esp32:esp32
+            name: ESP32
+          - fqbn: esp32:esp32:esp32c3
+            name: ESP32-C3
+          - fqbn: esp32:esp32:esp32c6
+            name: ESP32-C6
+          - fqbn: esp32:esp32:esp32s2
+            name: ESP32-S2
+          - fqbn: esp32:esp32:esp32s3
+            name: ESP32-S3
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v6
+
+      - name: 安装 arduino-cli
+        uses: arduino/setup-arduino-cli@v1
+
+      - name: 安装 ESP32 核心
+        run: arduino-cli core install esp32:esp32
+
+      - name: 编译固件 — ${{ matrix.name }}
+        run: |
+          arduino-cli compile \
+            --fqbn ${{ matrix.fqbn }} \
+            esp32/smart_flower_pot \
+            --output-dir firmware
+
+      - name: 上传固件产物 — ${{ matrix.name }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: firmware-${{ matrix.name }}
+          path: |
+            firmware/*.bin
+            firmware/*.elf
+          if-no-files-found: error

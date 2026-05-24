@@ -80,7 +80,7 @@ Tailwind CSS 4 uses the `@tailwindcss/vite` plugin — the entry is `@import "ta
 ### PWA
 
 - `public/manifest.json` — installable web app manifest (standalone display, emerald theme)
-- `public/sw.js` — Service Worker with **Cache-First** caching strategy, cache version `flowerpot-v8`
+- `public/sw.js` — Service Worker with **Cache-First** caching strategy, cache version `flowerpot-v9`
   - 所有 HTTP GET 请求缓存优先，15 天有效期
   - 缓存响应注入 `x-sfp-cached-at` 时间戳精确控制 TTL
   - 纯函数 `isCacheFresh()` / `createCacheEntry()` 分离缓存判断逻辑
@@ -106,7 +106,7 @@ The entire web frontend is a fully static SPA (no server-side rendering). Three 
    - After 15 days: SW fetches fresh copy from network, updates cache.
    - Offline refresh: SW returns cached HTML via `ignoreVary: true` matching. If the exact URL isn't cached, falls back to the root page (SPA Fallback).
 
-3. **Cache versioning**: `CACHE_NAME` (`flowerpot-v8`) acts as a deployment-level cache key. Bumping it on deploy causes the SW `activate` event to delete all other caches, ensuring a clean slate without manual clearing.
+3. **Cache versioning**: `CACHE_NAME` (`flowerpot-v9`) acts as a deployment-level cache key. Bumping it on deploy causes the SW `activate` event to delete all other caches, ensuring a clean slate without manual clearing.
 
 ### ESP32 firmware
 
@@ -151,13 +151,13 @@ Binary framed protocol over USB Serial (115200 baud). Frame format: `0xAA 0x55` 
 - When using Serial mode, close Arduino IDE's Serial Monitor first to avoid port conflicts.
 - The firmware's `MAX_WATERING_MS` is **5000 (5 seconds)**, not 60 seconds. Trust the code.
 - `vite.config.js` uses CommonJS `path` module via `import` — Vite handles this, but do not convert to `import.meta.url` without verifying the build still resolves paths correctly.
-- **Cache version MUST be bumped on EVERY deploy that changes any file**: `web/public/sw.js`'s `CACHE_NAME` (currently `flowerpot-v8`) must be incremented every time anything changes (HTML/JS/CSS/images/SW logic), or existing users will be served stale cached files until the 15-day TTL expires. The SW `activate` event only deletes caches whose name differs from the current `CACHE_NAME`. Forgetting this is the #1 cause of "my fix didn't take effect" bugs.
+- **Cache version MUST be bumped on EVERY deploy that changes any file**: `web/public/sw.js`'s `CACHE_NAME` (currently `flowerpot-v9`) must be incremented every time anything changes (HTML/JS/CSS/images/SW logic), or existing users will be served stale cached files until the 15-day TTL expires. The SW `activate` event only deletes caches whose name differs from the current `CACHE_NAME`. Forgetting this is the #1 cause of "my fix didn't take effect" bugs.
 - `assetsInlineLimit: 0` in `vite.config.js` means **no base64 inlining** — every asset is a separate file. This is intentional for SW cache granularity. If performance testing shows excessive HTTP requests, consider raising the limit, but always test SW caching behavior after the change.
 - There is no CI, no pre-commit hooks, and no automated testing of any kind.
 - **waterDirection = 0xFF** is a legacy protocol control flag, not an actual direction. The current Web UI sends actual direction values (0 or 1). The firmware only triggers the pump when speed changes from 0 to non-zero, so saving direction changes won't accidentally start the pump. The 0xFF flag is retained for backward compatibility.
 - **Connection vs data reading are separated**: `useConnection.js` sets `connected = true` and `connecting = false` immediately after the transport-level connection succeeds. `readDeviceData()` runs asynchronously in the background — `readSettings()` and `readDeviceInfo()` failures are non-fatal, they log warnings but don't tear down the connection or show error alerts. The UI enters the main dashboard immediately upon connection, without waiting for data reads to complete.
 - **Serial startup delay**: When opening a serial connection, the client waits 2 seconds for the ESP32 to finish resetting. No ready signal or frame caching is used — `readDeviceInfo()` always sends an explicit request.
-- **BLE auto-reconnect requires scanning**: btleplug requires devices to be discovered via scanning before connecting. `autoReconnect()` and `tryQuickBleConnect()` both use `scanAndConnect()` which scans first, then connects. Direct `connect(address)` without prior scanning will fail.
+- **BLE auto-reconnect requires scanning**: btleplug requires devices to be discovered via scanning before connecting. `autoReconnect()`, `tryQuickBleConnect()`, and `autoConnectFromUrl()` all use `scanAndConnect()` which scans first, then connects. Direct `connect(address)` without prior scanning will fail.
 - **BLE scan is stream-based**: `startScan` from `@mnlphlp/plugin-blec` returns immediately — the Rust backend spawns a tokio task that scans in 200ms intervals and pushes devices via Tauri Channel. The `scanDevices()` function uses a callback pattern (`onDevice`) rather than returning an array, because the array would always be empty at the time `startScan` resolves.
 
 ### Desktop (Tauri 2 Client)
@@ -219,3 +219,9 @@ Binary framed protocol over USB Serial (115200 baud). Frame format: `0xAA 0x55` 
 - 使用 `tauri-apps/tauri-action@v0`
 - 发布到 GitHub Release（预发布，非草稿）
 - Android 签名需要 GitHub Secrets: `ANDROID_KEY_ALIAS`, `ANDROID_KEY_BASE64`, `ANDROID_KEY_PASSWORD`
+
+**ESP32 Firmware Build** (`.github/workflows/build-esp32-firmware.yml`):
+- 手动触发 `workflow_dispatch`
+- 构建矩阵：ESP32、ESP32-C3、ESP32-C6、ESP32-S2、ESP32-S3（5 芯片并行）
+- 使用 arduino-cli 编译固件（`esp32:esp32` 核心）
+- 构建产物（.bin / .elf）按芯片名称上传为独立 artifact

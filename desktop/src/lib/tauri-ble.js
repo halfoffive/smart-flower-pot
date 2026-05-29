@@ -101,9 +101,9 @@ const isFlowerPotDevice = (device) => {
  * 调用方无需等待扫描结束，设备发现后立即可见
  *
  * @param {function} onDevice - 发现新设备时的回调 (device: BleDevice) => void
- * @param {number} [timeoutMs=10000] - 扫描持续时间
+ * @param {number} [timeoutMs=15000] - 扫描持续时间
  */
-export async function scanDevices(onDevice, timeoutMs = 10000) {
+export async function scanDevices(onDevice, timeoutMs = 15000) {
   const seen = new Set()
 
   try {
@@ -173,10 +173,10 @@ export async function stopScanDevices() {
  * @param {string} address - 目标设备地址
  * @param {function} onSensorData - 传感器数据回调
  * @param {function} onDisconnect - 断开连接回调
- * @param {number} [timeoutMs=10000] - 扫描超时
+ * @param {number} [timeoutMs=15000] - 扫描超时
  * @returns {Promise<boolean>} 连接是否成功
  */
-export async function scanAndConnect(address, onSensorData, onDisconnect, timeoutMs = 10000) {
+export async function scanAndConnect(address, onSensorData, onDisconnect, timeoutMs = 15000) {
   console.log('[BLE/Tauri] 扫描并连接:', address, '超时:', timeoutMs, 'ms')
 
   const addressLower = address.toLowerCase()

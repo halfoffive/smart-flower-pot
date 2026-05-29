@@ -69,6 +69,9 @@
 #define SENSOR_CHAR_UUID "12345678-1234-1234-1234-123456789abe"
 #define DEVICE_INFO_UUID "12345678-1234-1234-1234-123456789abf"
 
+/* ===================== 固件版本 ===================== */
+#define FIRMWARE_VERSION "4.3.5"
+
 /* ===================== 设置默认值 ===================== */
 #define DEFAULT_TEMP_MIN 150    // 15.0°C
 #define DEFAULT_TEMP_MAX 350    // 35.0°C
@@ -459,7 +462,9 @@ String buildDeviceInfoJson() {
            (uint8_t)(mac >> 8), (uint8_t)(mac));
 
   String json = "{";
-  json += "\"fw\":\"4.3.5\"";
+  json += "\"fw\":\"";
+  json += FIRMWARE_VERSION;
+  json += "\"";
   json += ",\"mac\":\"";
   json += macStr;
   json += "\"";
@@ -530,7 +535,9 @@ void handleSerialCommand() {
                   saveSettings();
 
                   // ── 水泵控制逻辑（解耦：方向保存与水泵触发分离） ──
+                  // 旧版兼容：仅保存设置，不触发水泵
                   if (newDir == WATER_DIR_SAVE_ONLY) {
+                    Serial.println("[设置] ✓ 仅保存设置（串口，不触发水泵）");
                   }
                   // 速度从 0 变为非 0：启动水泵（手动模式）
                   else if (newSpeed > 0 && prevPumpSpeed == 0 && systemState == STATE_IDLE && !shouldStartWatering()) {
@@ -731,7 +738,9 @@ void setup() {
   Serial.print("║       芯片: ");
   Serial.print(ESP.getChipModel());
   Serial.println("                ║");
-  Serial.println("║       版本: 4.3.2                    ║");
+  Serial.print("║       版本: ");
+  Serial.print(FIRMWARE_VERSION);
+  Serial.println("                    ║");
   Serial.println("╚══════════════════════════════════════╝");
   Serial.println();
 

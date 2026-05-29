@@ -188,13 +188,17 @@ export function getPortPath() {
 }
 
 /**
- * 获取当前串口设备信息（兼容 Web 端 getPortInfo 接口）
- * Tauri 串口插件不直接暴露 USB VID/PID，返回路径信息
- * @returns {{ portPath: string } | null}
+ * 获取当前串口设备信息
+ * Tauri 串口插件不直接暴露 USB VID/PID，返回端口路径
+ * @returns {{ portPath: string, usbVendorId: null, usbProductId: null } | null}
  */
 export function getPortInfo() {
   if (!port) return null
-  return { portPath: port._path ?? null }
+  return {
+    portPath: port._path ?? null,
+    usbVendorId: null,
+    usbProductId: null,
+  }
 }
 
 // ═══════════════════════════════════════════

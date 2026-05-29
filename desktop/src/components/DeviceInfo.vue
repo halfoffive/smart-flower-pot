@@ -17,8 +17,7 @@ const serialUsbInfo = computed(() => {
   const info = serial.getPortInfo()
   if (!info) return null
   return {
-    vid: info.usbVendorId ? `0x${info.usbVendorId.toString(16)}` : '—',
-    pid: info.usbProductId ? `0x${info.usbProductId.toString(16)}` : '—',
+    port: info.portPath || '—',
   }
 })
 
@@ -41,8 +40,7 @@ const infoItems = computed(() => {
   }
 
   if (serialUsbInfo.value) {
-    items.push({ label: 'USB VID', value: serialUsbInfo.value.vid })
-    items.push({ label: 'USB PID', value: serialUsbInfo.value.pid })
+    items.push({ label: '串口路径', value: serialUsbInfo.value.port })
   }
 
   return items

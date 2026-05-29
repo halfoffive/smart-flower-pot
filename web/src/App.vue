@@ -7,7 +7,7 @@
  * - theme: 主题管理（浅色/深色/自动三态）
  */
 
-import { provide, onMounted, computed } from 'vue'
+import { provide, onMounted, computed, onErrorCaptured } from 'vue'
 import { useConnection } from './composables/useConnection.js'
 import { useTheme } from './composables/useTheme.js'
 import { useToast } from './composables/useToast.js'
@@ -48,6 +48,13 @@ onMounted(() => {
     // 动画结束后从 DOM 移除，不阻塞后续操作
     splash.addEventListener('transitionend', () => splash.remove(), { once: true })
   }
+})
+
+// 全局错误边界：捕获子组件渲染错误，防止整个应用白屏
+onErrorCaptured((err, instance, info) => {
+  console.error('[错误边界] 组件渲染异常:', err, info)
+  showAlert('页面渲染异常，请刷新重试。错误信息: ' + err.message, '应用错误')
+  return false  // 阻止错误向上传播
 })
 </script>
 

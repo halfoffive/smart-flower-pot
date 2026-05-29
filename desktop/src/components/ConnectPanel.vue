@@ -50,7 +50,7 @@ async function startBleScan() {
   try {
     await scanDevices((device) => {
       bleDevices.value = [...bleDevices.value, device]
-    }, 10000)
+    }, 15000)
   } catch (e) {
     console.error('[连接] BLE 扫描失败:', e)
     scanning.value = false
@@ -59,7 +59,7 @@ async function startBleScan() {
 
   scanTimer = setTimeout(() => {
     scanning.value = false
-  }, 10500)
+  }, 15500)
 }
 
 function stopBleScan() {

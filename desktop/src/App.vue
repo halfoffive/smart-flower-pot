@@ -8,7 +8,7 @@
  * - 移除 Service Worker 相关逻辑
  */
 
-import { provide, onMounted } from 'vue'
+import { provide, onMounted, onErrorCaptured } from 'vue'
 import { useConnection } from './composables/useConnection.js'
 import { useTheme } from './composables/useTheme.js'
 import { useToast } from './composables/useToast.js'
@@ -40,6 +40,13 @@ onMounted(async () => {
     splash.classList.add('splash-exit')
     splash.addEventListener('transitionend', () => splash.remove(), { once: true })
   }
+})
+
+// 全局错误边界：捕获子组件渲染错误，防止整个应用白屏
+onErrorCaptured((err, instance, info) => {
+  console.error('[错误边界] 组件渲染异常:', err, info)
+  showAlert('页面渲染异常，请刷新重试。错误信息: ' + err.message, '应用错误')
+  return false  // 阻止错误向上传播
 })
 </script>
 

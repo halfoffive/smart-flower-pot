@@ -5,9 +5,16 @@
 ### 新增
 
 - **Android 构建图标修复**：GitHub Actions 构建前新增 `bun tauri icon public/potted_plant_3d.png --ci` 步骤，从源 PNG 生成全平台图标（含 Android mipmap）。自此 Android APK 打包时可正确获取应用图标
+- **Vue 错误边界**：`web/App.vue` 和 `desktop/App.vue` 添加 `onErrorCaptured` 钩子，子组件渲染异常时显示错误提示，防止整个应用白屏
 
 ### 修复
 
+- **固件版本号不一致**：启动横幅 `4.3.2` vs 设备信息 `4.3.5`，统一为 `FIRMWARE_VERSION` 宏定义 `4.3.5`，两处引用同一宏规避漂移
+- **Desktop DeviceInfo 串口 USB 标识失效**：`getPortInfo()` 实际返回 `{ portPath }`，DeviceInfo.vue 却尝试读取 `usbVendorId`/`usbProductId`（始终为 undefined）。修复：统一返回包含 `usbVendorId: null`/`usbProductId: null` 的对象，DeviceInfo 改显示串口路径（如 COM3）
+- **Web BLE 自动重连调用 requestDevice() 需用户手势**：`attemptReconnect()` 改用已断开的设备对象直接调用 `device.gatt.connect()`，不再走 `requestDevice()`
+- **vite.config.js ESM 兼容**：移除 `__dirname` 依赖，改用 `new URL('index.html', import.meta.url).pathname`
+- **Desktop BLE 扫描超时过短**：`scanDevices()`/`scanAndConnect()` 默认值 10s → 15s；ConnectPanel 扫描关闭定时器 10.5s → 15.5s
+- **Web BLE 设备过滤未含 Service UUID**：`requestDevice()` filter 加入 `services: [SERVICE_UUID]`
 - **AGENTS.md 缓存版本号漂移**：文档中 `flowerpot-v9` 更新为 `flowerpot-v11`，与 `web/public/sw.js` 保持一致
 
 ### 修改文件
@@ -16,6 +23,15 @@
 - `AGENTS.md` — 更新缓存版本号、Commands 新增图标生成命令、GitHub Actions 章节新增图标说明、Gotchas 新增 Tauri 图标生成说明、PWA 章节新增 icon 源文件说明
 - `README.md` — 目录结构新增 `potted_plant_3d.png`、Tauri 章节新增图标生成说明
 - `CHANGELOG.md` — 本文档
+- `esp32/smart_flower_pot/smart_flower_pot.ino` — 新增 `FIRMWARE_VERSION` 宏，启动横幅和 JSON 设备信息统一使用宏；串口命令处理器补全水泵注释
+- `desktop/src/lib/tauri-serial.js` — `getPortInfo()` 返回格式补充 `usbVendorId`/`usbProductId` 字段
+- `desktop/src/components/DeviceInfo.vue` — 串口信息改显示端口路径，移除无效 USB VID/PID 读取
+- `web/src/lib/ble.js` — `requestDevice` filter 加入 `services`；`attemptReconnect` 改用 `device.gatt.connect` 绕过用户手势需求
+- `web/vite.config.js` — 移除 `path.resolve(__dirname)`，改为 `new URL(index.html, import.meta.url).pathname`
+- `desktop/src/lib/tauri-ble.js` — `scanDevices`/`scanAndConnect` 默认超时 10s → 15s
+- `desktop/src/components/ConnectPanel.vue` — BLE 扫描关闭定时器同步 10.5s → 15.5s
+- `web/src/App.vue` — 新增 `onErrorCaptured` 错误边界
+- `desktop/src/App.vue` — 新增 `onErrorCaptured` 错误边界
 
 ## [4.3.5] — 2026-05-29
 

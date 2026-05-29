@@ -66,7 +66,7 @@ export async function connect(onSensorData, onDisconnect) {
     console.log('[BLE] 正在搜索设备...')
 
     device = await navigator.bluetooth.requestDevice({
-      filters: [{ name: '智能花盆' }],
+      filters: [{ name: '智能花盆', services: [SERVICE_UUID] }],
       optionalServices: [SERVICE_UUID],
     })
 
@@ -171,10 +171,11 @@ export function isConnected() {
 
 function handleDisconnect() {
   console.warn('[BLE] ⚠ 设备已断开')
+  const savedDevice = device  // 保存设备引用用于自动重连，cleanup 会置空 device
   cleanup()
   if (!userInitiatedDisconnect) {
     onDisconnectCb?.()
-    attemptReconnect()
+    attemptReconnect(savedDevice)
   }
 }
 
@@ -186,18 +187,29 @@ function cleanup() {
   device         = null
 }
 
-function attemptReconnect() {
+/**
+ * 自动重连：使用已断开的设备对象直连，不走 requestDevice()（无需用户手势）
+ * @param {BluetoothDevice} savedDevice - 断开前保存的设备引用
+ */
+function attemptReconnect(savedDevice) {
+  if (!savedDevice) return
   if (reconnectAttempts >= MAX_RECONNECT) {
     console.warn(`[BLE] 已达最大重连次数 (${MAX_RECONNECT})，停止重连`)
     return
   }
   reconnectAttempts++
   console.log(`[BLE] 尝试重连 ${reconnectAttempts} / ${MAX_RECONNECT}...`)
+
   reconnectTimer = setTimeout(async () => {
     try {
-      await connect(onSensorDataCb, onDisconnectCb)
+      device = savedDevice
+      device.addEventListener('gattserverdisconnected', handleDisconnect)
+      console.log('[BLE] 自动重连：直接连接已有设备...')
+      server = await device.gatt.connect()
+      await setupGattConnection(server)
+      console.log('[BLE] ✅ 自动重连成功')
     } catch (_) {
-      attemptReconnect()
+      attemptReconnect(savedDevice)
     }
   }, RECONNECT_DELAY)
 }

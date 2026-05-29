@@ -1,5 +1,22 @@
 # 更新日志
 
+## [4.3.6] — 2026-05-29
+
+### 新增
+
+- **Android 构建图标修复**：GitHub Actions 构建前新增 `bun tauri icon public/potted_plant_3d.png --ci` 步骤，从源 PNG 生成全平台图标（含 Android mipmap）。自此 Android APK 打包时可正确获取应用图标
+
+### 修复
+
+- **AGENTS.md 缓存版本号漂移**：文档中 `flowerpot-v9` 更新为 `flowerpot-v11`，与 `web/public/sw.js` 保持一致
+
+### 修改文件
+
+- `.github/workflows/build-tauri.yml` — 新增图标生成步骤
+- `AGENTS.md` — 更新缓存版本号、Commands 新增图标生成命令、GitHub Actions 章节新增图标说明、Gotchas 新增 Tauri 图标生成说明、PWA 章节新增 icon 源文件说明
+- `README.md` — 目录结构新增 `potted_plant_3d.png`、Tauri 章节新增图标生成说明
+- `CHANGELOG.md` — 本文档
+
 ## [4.3.5] — 2026-05-29
 
 ### 修复

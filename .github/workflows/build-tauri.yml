@@ -109,6 +109,10 @@ jobs:
         if: matrix.mobile != ''
         run: cd desktop && bunx @tauri-apps/cli ${{ matrix.mobile }} init
 
+      - name: 生成应用图标（从源 PNG 生成全平台图标）
+        working-directory: desktop
+        run: bun tauri icon public/potted_plant_3d.png --ci
+
       - name: 注入 Android JitPack 仓库
         if: matrix.mobile == 'android'
         run: |

@@ -27,6 +27,9 @@ cd desktop && bun install && bun run tauri dev
 
 # Tauri 客户端构建
 bun run tauri build
+
+# 生成 Tauri 应用图标（从源 PNG 生成全平台图标）
+cd desktop && bun tauri icon public/potted_plant_3d.png
 ```
 
 No test, lint, or typecheck scripts exist.
@@ -80,7 +83,7 @@ Tailwind CSS 4 uses the `@tailwindcss/vite` plugin — the entry is `@import "ta
 ### PWA
 
 - `public/manifest.json` — installable web app manifest (standalone display, emerald theme)
-- `public/sw.js` — Service Worker with **Cache-First** caching strategy, cache version `flowerpot-v9`
+- `public/sw.js` — Service Worker with **Cache-First** caching strategy, cache version `flowerpot-v11`
   - 所有 HTTP GET 请求缓存优先，15 天有效期
   - 缓存响应注入 `x-sfp-cached-at` 时间戳精确控制 TTL
   - 纯函数 `isCacheFresh()` / `createCacheEntry()` 分离缓存判断逻辑
@@ -88,8 +91,9 @@ Tailwind CSS 4 uses the `@tailwindcss/vite` plugin — the entry is `@import "ta
   - 安装时预缓存根页面（`self.registration.scope`），确保离线刷新可用
   - 导航请求使用 `ignoreVary: true` 匹配缓存，不受 Accept/Vary 头差异影响
   - 离线导航完全无缓存时降级返回根页面（SPA Fallback）
-  - 新版本发布时递增 `CACHE_NAME`，激活阶段自动清理旧缓存
+  - 新版本发布时递增 `CACHE_NAME`（当前 `flowerpot-v11`），激活阶段自动清理旧缓存
 - `public/icon.svg` — SVG icon used as both favicon and PWA app icon
+- `public/potted_plant_3d.png` — 主应用图标源文件（1024×1024 PNG），也用作 favicon 和 Web 端图标；桌面端通过 `bun tauri icon` 从此文件生成全平台图标
 - `src/sw-register.js` — SW registration module, only activates in production (`import.meta.env.PROD`) to avoid interfering with Vite HMR in dev
 
 ### Caching strategy
@@ -106,7 +110,7 @@ The entire web frontend is a fully static SPA (no server-side rendering). Three 
    - After 15 days: SW fetches fresh copy from network, updates cache.
    - Offline refresh: SW returns cached HTML via `ignoreVary: true` matching. If the exact URL isn't cached, falls back to the root page (SPA Fallback).
 
-3. **Cache versioning**: `CACHE_NAME` (`flowerpot-v9`) acts as a deployment-level cache key. Bumping it on deploy causes the SW `activate` event to delete all other caches, ensuring a clean slate without manual clearing.
+3. **Cache versioning**: `CACHE_NAME` (`flowerpot-v11`) acts as a deployment-level cache key. Bumping it on deploy causes the SW `activate` event to delete all other caches, ensuring a clean slate without manual clearing.
 
 ### ESP32 firmware
 
@@ -151,8 +155,9 @@ Binary framed protocol over USB Serial (115200 baud). Frame format: `0xAA 0x55` 
 - When using Serial mode, close Arduino IDE's Serial Monitor first to avoid port conflicts.
 - The firmware's `MAX_WATERING_MS` is **5000 (5 seconds)**, not 60 seconds. Trust the code.
 - `vite.config.js` uses CommonJS `path` module via `import` — Vite handles this, but do not convert to `import.meta.url` without verifying the build still resolves paths correctly.
-- **Cache version MUST be bumped on EVERY deploy that changes any file**: `web/public/sw.js`'s `CACHE_NAME` (currently `flowerpot-v9`) must be incremented every time anything changes (HTML/JS/CSS/images/SW logic), or existing users will be served stale cached files until the 15-day TTL expires. The SW `activate` event only deletes caches whose name differs from the current `CACHE_NAME`. Forgetting this is the #1 cause of "my fix didn't take effect" bugs.
+- **Cache version MUST be bumped on EVERY deploy that changes any file**: `web/public/sw.js`'s `CACHE_NAME` (currently `flowerpot-v11`) must be incremented every time anything changes (HTML/JS/CSS/images/SW logic), or existing users will be served stale cached files until the 15-day TTL expires. The SW `activate` event only deletes caches whose name differs from the current `CACHE_NAME`. Forgetting this is the #1 cause of "my fix didn't take effect" bugs.
 - `assetsInlineLimit: 0` in `vite.config.js` means **no base64 inlining** — every asset is a separate file. This is intentional for SW cache granularity. If performance testing shows excessive HTTP requests, consider raising the limit, but always test SW caching behavior after the change.
+- **Tauri 图标从源 PNG 生成**：`desktop/public/potted_plant_3d.png` 是图标源文件（1024×1024 PNG），每次构建前通过 `bun tauri icon public/potted_plant_3d.png --ci` 重新生成所有平台图标。如需更换应用图标，替换此 PNG 文件后重新生成即可。
 - There is no CI, no pre-commit hooks, and no automated testing of any kind.
 - **waterDirection = 0xFF** is a legacy protocol control flag, not an actual direction. The current Web UI sends actual direction values (0 or 1). The firmware only triggers the pump when speed changes from 0 to non-zero, so saving direction changes won't accidentally start the pump. The 0xFF flag is retained for backward compatibility.
 - **Connection vs data reading are separated**: `useConnection.js` sets `connected = true` and `connecting = false` immediately after the transport-level connection succeeds. `readDeviceData()` runs asynchronously in the background — `readSettings()` and `readDeviceInfo()` failures are non-fatal, they log warnings but don't tear down the connection or show error alerts. The UI enters the main dashboard immediately upon connection, without waiting for data reads to complete.
@@ -219,6 +224,7 @@ Binary framed protocol over USB Serial (115200 baud). Frame format: `0xAA 0x55` 
 - 使用 `tauri-apps/tauri-action@v0`
 - 发布到 GitHub Release（预发布，非草稿）
 - Android 签名需要 GitHub Secrets: `ANDROID_KEY_ALIAS`, `ANDROID_KEY_BASE64`, `ANDROID_KEY_PASSWORD`
+- **图标自动生成**：构建前执行 `bun tauri icon public/potted_plant_3d.png --ci`，从源 PNG 生成全平台图标（含 Android mipmap），确保各平台图标一致性
 
 **ESP32 Firmware Build** (`.github/workflows/build-esp32-firmware.yml`):
 - 手动触发 `workflow_dispatch`

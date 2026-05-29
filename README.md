@@ -101,7 +101,8 @@ smart-flower-pot/
 │   ├── public/
 │   │   ├── manifest.json            # PWA 清单
 │   │   ├── sw.js                    # Service Worker（Cache-First 激进缓存，15天TTL）
-│   │   └── icon.svg                 # PWA / Favicon 图标
+│   │   ├── icon.svg                 # PWA / Favicon 图标
+│   │   └── potted_plant_3d.png      # 主应用图标（1024×1024 PNG）
 │   └── src/
 │       ├── App.vue                  # 根组件（状态编排）
 │       ├── main.js                  # Vue 3 应用入口
@@ -224,6 +225,8 @@ bun run tauri build
 ```
 
 也可通过 GitHub Actions 手动触发构建（`.github/workflows/build-tauri.yml`），构建产物自动上传到 GitHub Release（预发布）。
+
+> **应用图标**：桌面端和移动端图标从 `desktop/public/potted_plant_3d.png` 源文件生成。运行 `bun tauri icon public/potted_plant_3d.png` 可重新生成全平台图标。CI 构建前会自动执行此命令，确保 Android 等平台图标正确。
 
 ### 4. 使用说明
 

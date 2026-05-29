@@ -1,5 +1,28 @@
 # 更新日志
 
+## [4.3.5] — 2026-05-29
+
+### 修复
+
+- **CP2102 串口连接后数据乱码**：固件输出的调试文本（`Serial.print`）与二进制帧协议混用同一串口，调试文本中的字节序列可能产生虚假 `0xAA 0x55` 帧头，导致帧解析器卡死
+  - 根因：`processRxBuffer()` 误认虚假帧头后读取 `payloadLen`，若值异常大则永久等待帧完整，后续真实帧无法处理
+  - 修复：在等待帧完整前增加 `type` + `payloadLen` 合法性校验，快速跳过虚假帧头
+  - 修复：`readSettings()`/`readDeviceInfo()` 发命令前清空缓冲区，避免请求-响应被起步阶段的调试文本干扰
+- **网页启动阶段串口缓冲区残留噪音**：ESP32 启动横幅和初始化日志在连接前已堆积在串口缓冲区，`readSettings()` 的请求-响应可能被残留噪音干扰
+  - 修复：`readSettings()`/`readDeviceInfo()` 发送命令前将 `rxBuffer` 置空
+
+### 变更
+
+- 帧解析器仅处理合法的类型-载荷长度组合（0x01→6, 0x02→11, 0x03→10~255, 0x04→0），其他组合直接跳过
+- 所有修改仅在网页端和桌面客户端，固件无需更新
+
+### 修改文件
+
+- `web/src/lib/serial.js` — processRxBuffer 增加帧校验、readSettings/readDeviceInfo 清空缓冲区
+- `desktop/src/lib/tauri-serial.js` — 同步 serial.js 修复
+- `web/public/sw.js` — v10 → v11
+- version bump: web/desktop/tauri → 4.3.5, firmware → 4.3.5
+
 ## [4.3.4] — 2026-05-23
 
 ### 修复

@@ -459,7 +459,7 @@ String buildDeviceInfoJson() {
            (uint8_t)(mac >> 8), (uint8_t)(mac));
 
   String json = "{";
-  json += "\"fw\":\"4.3.2\"";
+  json += "\"fw\":\"4.3.5\"";
   json += ",\"mac\":\"";
   json += macStr;
   json += "\"";

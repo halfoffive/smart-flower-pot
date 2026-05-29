@@ -134,6 +134,9 @@ export async function disconnect() {
 export async function readSettings() {
   if (!connected) throw new Error('未连接到设备')
 
+  // 清空缓冲区，避免固件调试文本残留干扰请求-响应配对
+  rxBuffer = new Uint8Array(0)
+
   const frame = buildFrame(TYPE_READ_SETTINGS, new Uint8Array(0))
   await writeFrame(frame)
   return waitForResponse(TYPE_SETTINGS, 5000)
@@ -157,6 +160,9 @@ export async function writeSettings(buffer) {
  */
 export async function readDeviceInfo() {
   if (!connected) throw new Error('未连接到设备')
+
+  // 清空缓冲区，避免固件调试文本残留干扰请求-响应配对
+  rxBuffer = new Uint8Array(0)
 
   const frame = buildFrame(TYPE_DEVICE_INFO, new Uint8Array(0))
   await writeFrame(frame)
@@ -219,6 +225,20 @@ function processRxBuffer() {
 
     const type = rxBuffer[2]
     const payloadLen = rxBuffer[3]
+
+    // 校验帧类型与载荷长度，快速拒绝噪音中的虚假帧头
+    const validType = type >= 0x01 && type <= 0x04
+    const validLen = (
+      (type === 0x01 && payloadLen === 6) ||
+      (type === 0x02 && payloadLen === 11) ||
+      (type === 0x03 && payloadLen >= 10 && payloadLen <= 255) ||
+      (type === 0x04 && payloadLen === 0)
+    )
+    if (!validType || !validLen) {
+      rxBuffer = rxBuffer.slice(1)
+      continue
+    }
+
     const totalLen = FRAME_PAYLOAD_OFFSET + payloadLen + FRAME_CHECKSUM_BYTES
 
     if (rxBuffer.length < totalLen) return

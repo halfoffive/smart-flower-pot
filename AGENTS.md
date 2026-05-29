@@ -131,7 +131,7 @@ Binary, Little-Endian, fixed-length buffers. Settings = 11 bytes, sensor data = 
 
 **Save-only flag (legacy)**: Byte [10] (`waterDirection`) = `0xFF` tells firmware to save settings without triggering pump. The firmware restores the previous `waterDirection` value before saving to NVS. **Note**: The current Web UI no longer uses this flag — it sends the actual direction value (0 or 1). The firmware only triggers the pump when speed changes from 0 to non-zero, so saving settings with actual direction values won't accidentally start the pump. The 0xFF flag is retained for backward compatibility with older Web UI versions.
 
-**Device info**: JSON format `{"fw":"4.3.0","mac":"XX:XX:XX:XX:XX:XX","chip":"ESP32-C6","rev":1,"flash":4096,"heap":12345}`. Parsed on the web side by `parseDeviceInfo()`.
+**Device info**: JSON format `{"fw":"4.3.5","mac":"XX:XX:XX:XX:XX:XX","chip":"ESP32-C6","rev":1,"flash":4096,"heap":12345}`. Parsed on the web side by `parseDeviceInfo()`. Firmware defines version via `FIRMWARE_VERSION` macro — startup banner and JSON both use it.
 
 ### Serial protocol
 
@@ -144,6 +144,7 @@ Binary framed protocol over USB Serial (115200 baud). Frame format: `0xAA 0x55` 
 
 - All comments are in Chinese.
 - Functional style in JS — avoid class-heavy patterns. Pure functions preferred, immutable state updates via spread operator.
+- Vue root components (`App.vue`) include an `onErrorCaptured` error boundary that catches child component render errors and shows user-friendly alerts instead of blank screens.
 - Vue 3 Composition API with `<script setup>` — no Options API.
 - Composables return reactive refs and methods; components consume via `inject()`.
 - Settings inputs update memory only (via `updateSetting()`) without triggering re-renders.
@@ -154,7 +155,7 @@ Binary framed protocol over USB Serial (115200 baud). Frame format: `0xAA 0x55` 
 - **Web Bluetooth and Web Serial only work in Chromium browsers** (Chrome, Edge). Firefox/Safari will silently fail.
 - When using Serial mode, close Arduino IDE's Serial Monitor first to avoid port conflicts.
 - The firmware's `MAX_WATERING_MS` is **5000 (5 seconds)**, not 60 seconds. Trust the code.
-- `vite.config.js` uses CommonJS `path` module via `import` — Vite handles this, but do not convert to `import.meta.url` without verifying the build still resolves paths correctly.
+- `web/vite.config.js` uses `new URL('index.html', import.meta.url).pathname` instead of `resolve(__dirname, 'index.html')` for ESM standard compliance. Keep it this way — do not revert to `__dirname`.
 - **Cache version MUST be bumped on EVERY deploy that changes any file**: `web/public/sw.js`'s `CACHE_NAME` (currently `flowerpot-v11`) must be incremented every time anything changes (HTML/JS/CSS/images/SW logic), or existing users will be served stale cached files until the 15-day TTL expires. The SW `activate` event only deletes caches whose name differs from the current `CACHE_NAME`. Forgetting this is the #1 cause of "my fix didn't take effect" bugs.
 - `assetsInlineLimit: 0` in `vite.config.js` means **no base64 inlining** — every asset is a separate file. This is intentional for SW cache granularity. If performance testing shows excessive HTTP requests, consider raising the limit, but always test SW caching behavior after the change.
 - **Tauri 图标从源 PNG 生成**：`desktop/public/potted_plant_3d.png` 是图标源文件（1024×1024 PNG），每次构建前通过 `bun tauri icon public/potted_plant_3d.png --ci` 重新生成所有平台图标。如需更换应用图标，替换此 PNG 文件后重新生成即可。
@@ -162,7 +163,8 @@ Binary framed protocol over USB Serial (115200 baud). Frame format: `0xAA 0x55` 
 - **waterDirection = 0xFF** is a legacy protocol control flag, not an actual direction. The current Web UI sends actual direction values (0 or 1). The firmware only triggers the pump when speed changes from 0 to non-zero, so saving direction changes won't accidentally start the pump. The 0xFF flag is retained for backward compatibility.
 - **Connection vs data reading are separated**: `useConnection.js` sets `connected = true` and `connecting = false` immediately after the transport-level connection succeeds. `readDeviceData()` runs asynchronously in the background — `readSettings()` and `readDeviceInfo()` failures are non-fatal, they log warnings but don't tear down the connection or show error alerts. The UI enters the main dashboard immediately upon connection, without waiting for data reads to complete.
 - **Serial startup delay**: When opening a serial connection, the client waits 2 seconds for the ESP32 to finish resetting. No ready signal or frame caching is used — `readDeviceInfo()` always sends an explicit request.
-- **BLE auto-reconnect requires scanning**: btleplug requires devices to be discovered via scanning before connecting. `autoReconnect()`, `tryQuickBleConnect()`, and `autoConnectFromUrl()` all use `scanAndConnect()` which scans first, then connects. Direct `connect(address)` without prior scanning will fail.
+- **BLE auto-reconnect requires scanning** (Desktop): btleplug requires devices to be discovered via scanning before connecting. `autoReconnect()`, `tryQuickBleConnect()`, and `autoConnectFromUrl()` all use `scanAndConnect()` which scans first, then connects. Direct `connect(address)` without prior scanning will fail.
+- **BLE auto-reconnect uses direct reconnect** (Web): `web/src/lib/ble.js` uses the disconnected `BluetoothDevice` object to call `device.gatt.connect()` directly, avoiding `requestDevice()` which requires a user gesture. The device reference is saved in `handleDisconnect()` before `cleanup()` clears it.
 - **BLE scan is stream-based**: `startScan` from `@mnlphlp/plugin-blec` returns immediately — the Rust backend spawns a tokio task that scans in 200ms intervals and pushes devices via Tauri Channel. The `scanDevices()` function uses a callback pattern (`onDevice`) rather than returning an array, because the array would always be empty at the time `startScan` resolves.
 
 ### Desktop (Tauri 2 Client)
@@ -208,7 +210,7 @@ Binary framed protocol over USB Serial (115200 baud). Frame format: `0xAA 0x55` 
 - `scanAndConnect(address, onSensorData, onDisconnect, timeoutMs)` — 扫描并自动连接指定地址设备，供自动重连使用
 - `isFlowerPotDevice(device)` — 过滤无关蓝牙设备，匹配规则：设备 services 包含项目 Service UUID 或设备名称包含关键词（智能花盆/SmartFlowerPot/SFP）
 - `stopScanDevices()` — 停止 BLE 扫描
-- 扫描超时默认 10 秒，ConnectPanel 中 10.5 秒后自动设置 scanning=false
+- 扫描超时默认 15 秒，ConnectPanel 中 15.5 秒后自动设置 scanning=false
 
 **Capabilities** (`src-tauri/capabilities/default.json`):
 - `core:default`, `core:event:default` — 核心权限

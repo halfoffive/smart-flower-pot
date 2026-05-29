@@ -78,7 +78,7 @@
 - **BLE 设备过滤**：扫描时自动过滤无关蓝牙设备，仅显示智能花盆（按 Service UUID 和设备名称匹配）
 - **BLE 快速重连**：点击蓝牙连接时优先尝试连接上次设备，失败后回退到扫描模式
 - **双模通信**：BLE 与 Serial 可同时工作，传感器数据同时推送至两种连接
-- **设备信息面板**：BLE 和串口连接后均显示 MAC 地址、芯片型号、芯片修订版、Flash 大小、固件版本、串口 USB VID/PID
+- **设备信息面板**：BLE 和串口连接后均显示 MAC 地址、芯片型号、芯片修订版、Flash 大小、固件版本；串口模式 Web 端显示 USB VID/PID，桌面端显示串口路径（如 COM3）
 - **URL 自动连接**：BLE 模式 `?mode=ble&mac=XX:XX:XX:XX:XX:XX` 自动连接已配对设备；若浏览器不支持自动连接 API 或无已配对设备，自动弹出手动蓝牙选择框；加 `&pick=1` 直接弹出设备选择框（跳过自动连接）；串口模式 `?mode=serial&vid=0x10c4&pid=0xea60` 按 USB 标识匹配（无需用户手势）
 - **BLE 高频推送**：BLE 连接时通知频率 0.5 秒，与传感器读取频率解耦
 - **方向保存与水泵解耦**：保存设置时发送实际方向值，固件仅在速度从 0 变为非 0 时触发水泵，保存设置不会误触发
@@ -226,7 +226,7 @@ bun run tauri build
 
 也可通过 GitHub Actions 手动触发构建（`.github/workflows/build-tauri.yml`），构建产物自动上传到 GitHub Release（预发布）。
 
-> **应用图标**：桌面端和移动端图标从 `desktop/public/potted_plant_3d.png` 源文件生成。运行 `bun tauri icon public/potted_plant_3d.png` 可重新生成全平台图标。CI 构建前会自动执行此命令，确保 Android 等平台图标正确。
+> **应用图标**：桌面端和移动端图标从 `desktop/public/potted_plant_3d.png` 源文件生成。运行 `bun tauri icon public/potted_plant_3d.png` 可重新生成全平台图标（含 Android mipmap/IOS AppIcon）。CI 构建前自动执行此命令，确保各平台图标一致性。
 
 ### 4. 使用说明
 
@@ -345,7 +345,7 @@ Web 前端为纯静态 SPA（无服务端渲染），采用 **Service Worker Cac
 |------|------|----------|------|
 | 0x01 | ESP32 → Web | 6 | 传感器数据（与 BLE 传感器数据结构相同） |
 | 0x02 | Web → ESP32 | 11 | 设置数据（与 BLE 设置数据结构相同） |
-| 0x03 | ESP32 → Web | 变长 | 设备信息 JSON（如 `{"fw":"4.3.0","mac":"...","chip":"ESP32-C6",...}`） |
+| 0x03 | ESP32 → Web | 变长 | 设备信息 JSON（如 `{"fw":"4.3.5","mac":"...","chip":"ESP32-C6",...}`） |
 | 0x04 | Web → ESP32 | 0 | 读取设置请求（ESP32 回传 0x02 类型帧） |
 
 ### 示例：传感器数据帧

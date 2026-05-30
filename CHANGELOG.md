@@ -1,5 +1,21 @@
 # 更新日志
 
+## [4.3.7] — 2026-05-30
+
+### 修复
+- **BLE 重连事件监听器重复注册**：`ble.js` 在断开重连前先 `removeEventListener` 再 `addEventListener`，避免多个监听器累积导致回调执行多次
+- **串口 pendingResponse 并发覆盖**：`serial.js` 的 `waitForResponse` 函数增加防重入保护，`pendingResponse` 非空时拒绝新请求；响应到达后及时置空，避免内存泄漏
+- **主题监听器无法正确移除**：`useTheme.js` 将匿名箭头函数改为具名函数 `onSystemThemeChange`，`removeEventListener` 才能找到并移除正确的处理函数
+- **全局错误兜底**：`main.js` 添加 `app.config.errorHandler` 捕获未被组件错误边界拦截的异步异常；`App.vue` 的 `onErrorCaptured` 返回 `true` 正确阻止错误传播
+- **固件 BLE 连接间隔最大化**：`smart_flower_pot.ino` 中 808 行 `setMinPreferred` 修正为 `setMaxPreferred`，使 BLE 最大连接间隔 ~22.5ms 生效
+
+### 变更
+- 移除 `settings.js` 中未使用的 `validateSettings()` 函数和 `DEFAULT_SENSOR` 常量（死代码）
+- `manifest.json` 新增 `icon.svg` 图标条目（`public/icon.svg` 已存在但未被引用）
+- `index.html` 新增 SEO 和 iOS PWA meta 标签（`description`、`apple-mobile-web-app-capable`）
+- `vite.config.js` 补充 base 策略中文注释
+- `AGENTS.md` 同步修复后的设计变更
+
 ## [4.3.6] — 2026-05-29
 
 ### 新增

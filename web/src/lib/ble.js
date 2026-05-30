@@ -172,6 +172,8 @@ export function isConnected() {
 function handleDisconnect() {
   console.warn('[BLE] ⚠ 设备已断开')
   const savedDevice = device  // 保存设备引用用于自动重连，cleanup 会置空 device
+  // 先移除旧监听器，避免重复注册
+  savedDevice?.removeEventListener('gattserverdisconnected', handleDisconnect)
   cleanup()
   if (!userInitiatedDisconnect) {
     onDisconnectCb?.()
@@ -203,6 +205,8 @@ function attemptReconnect(savedDevice) {
   reconnectTimer = setTimeout(async () => {
     try {
       device = savedDevice
+      // 添加新监听器前移除旧的，防止重复注册
+      savedDevice?.removeEventListener('gattserverdisconnected', handleDisconnect)
       device.addEventListener('gattserverdisconnected', handleDisconnect)
       console.log('[BLE] 自动重连：直接连接已有设备...')
       server = await device.gatt.connect()

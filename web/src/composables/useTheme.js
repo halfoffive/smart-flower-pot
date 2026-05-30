@@ -63,21 +63,27 @@ const applyTheme = (theme) => {
 // 副作用模块（系统偏好监听）
 // ═══════════════════════════════════════════
 
+/**
+ * 系统主题变化处理器（缓存引用以便正确移除）
+ * @param {MediaQueryListEvent} e
+ */
+const onSystemThemeChange = (e) => {
+  if (currentMode.value === 'auto') {
+    applyTheme(e.matches ? 'dark' : 'light')
+  }
+}
+
 /** 监听系统配色方案变化（自动模式时跟随切换） */
 const watchSystemTheme = () => {
   if (mediaQuery) return
   mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
-  mediaQuery.addEventListener('change', (e) => {
-    if (currentMode.value === 'auto') {
-      applyTheme(e.matches ? 'dark' : 'light')
-    }
-  })
+  mediaQuery.addEventListener('change', onSystemThemeChange)
 }
 
 /** 移除系统主题监听 */
 const unwatchSystemTheme = () => {
   if (mediaQuery) {
-    mediaQuery.removeEventListener('change', () => {})
+    mediaQuery.removeEventListener('change', onSystemThemeChange)
     mediaQuery = null
   }
 }

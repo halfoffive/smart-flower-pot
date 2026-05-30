@@ -361,6 +361,11 @@ async function writeFrame(frame) {
 }
 
 function waitForResponse(expectedType, timeoutMs) {
+  // 防重入：上次请求还未响应，拒绝新请求防止 pendingResponse 被覆盖
+  if (pendingResponse) {
+    return Promise.reject(new Error('串口忙：上次请求尚未完成'))
+  }
+
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
       pendingResponse = null
@@ -369,6 +374,7 @@ function waitForResponse(expectedType, timeoutMs) {
 
     pendingResponse = {
       resolve: (buffer) => {
+        pendingResponse = null
         clearTimeout(timer)
         resolve(buffer)
       },

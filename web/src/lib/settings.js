@@ -35,49 +35,12 @@ export const DEFAULT_SETTINGS = Object.freeze({
   waterDirection: 0,
 })
 
-/** 默认传感器初始值（连接建立后等待首次推送时使用） */
-export const DEFAULT_SENSOR = Object.freeze({
-  soil: 0,
-  temp: 0,
-  hum:  0,
-  pump: 0,
-})
+
 
 /** 仅保存设置标志：固件看到 0xFF 不触发水泵 */
 export const WATER_DIR_SAVE_ONLY = 0xFF
 
-/** 各字段数值范围约束 */
-const SETTINGS_BOUNDS = Object.freeze({
-  tempMin:        { min: 0,   max: 600  },  // 0.0°C ~ 60.0°C（×10）
-  tempMax:        { min: 0,   max: 600  },
-  humMin:         { min: 0,   max: 100  },  // 0% ~ 100%
-  humMax:         { min: 0,   max: 100  },
-  soilThreshold:  { min: 0,   max: 4095 },  // 12-bit ADC
-  compareMode:    { min: 0,   max: 1    },  // 0=低于启动, 1=高于启动
-  pumpSpeed:      { min: 0,   max: 255  },  // 8-bit PWM
-  waterDirection: { min: 0,   max: 1    },  // 0=正转, 1=反转
-})
 
-/**
- * 校验设置对象各字段是否在合法范围内
- * 纯函数：不修改输入，返回校验结果
- * @param {object} s - 待校验的设置对象
- * @returns {{ valid: boolean, errors: string[] }}
- */
-export const validateSettings = (s) => {
-  const errors = []
-
-  for (const [key, bounds] of Object.entries(SETTINGS_BOUNDS)) {
-    const value = s[key]
-    if (typeof value !== 'number' || !Number.isFinite(value)) {
-      errors.push(`${key}: 必须为有效数字，收到 ${JSON.stringify(value)}`)
-    } else if (value < bounds.min || value > bounds.max) {
-      errors.push(`${key}: ${value} 超出范围 [${bounds.min}, ${bounds.max}]`)
-    }
-  }
-
-  return { valid: errors.length === 0, errors }
-}
 
 /**
  * 将设置对象序列化为 11 字节 ArrayBuffer

@@ -51,10 +51,11 @@ onMounted(() => {
 })
 
 // 全局错误边界：捕获子组件渲染错误，防止整个应用白屏
+// Vue 3 中返回 true 才阻止错误传播到 app.config.errorHandler
 onErrorCaptured((err, instance, info) => {
   console.error('[错误边界] 组件渲染异常:', err, info)
   showAlert('页面渲染异常，请刷新重试。错误信息: ' + err.message, '应用错误')
-  return false  // 阻止错误向上传播
+  return true  // true = 阻止向上传播到全局 errorHandler
 })
 </script>
 

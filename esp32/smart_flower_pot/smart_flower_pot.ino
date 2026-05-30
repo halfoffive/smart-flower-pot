@@ -805,7 +805,7 @@ void setup() {
   pAdvertising->addServiceUUID(SERVICE_UUID);
   pAdvertising->setScanResponse(true);
   pAdvertising->setMinPreferred(0x06);  // 最小连接间隔 ~7.5ms
-  pAdvertising->setMinPreferred(0x12);  // 最大连接间隔 ~22.5ms
+  pAdvertising->setMaxPreferred(0x12);  // 最大连接间隔 ~22.5ms
   BLEDevice::startAdvertising();
 
   Serial.println("[BLE] 广播已开启，等待客户端连接...");

@@ -1,6 +1,12 @@
 /**
  * Vite 构建配置
  *
+ * base 策略：
+ * - Cloudflare Pages（域名根目录）：默认 base="/"，无需额外配置
+ * - GitHub Pages（子目录）：        构建时 CLI 传入 --base=/repo-name/
+ *   例：bun run build -- --base=/smart-flower-pot/
+ *   不在 config 中硬编码 base，保持 Cloudflare 部署不受影响
+ *
  * 构建产物策略：
  * - assetsInlineLimit: 0 — 所有资源以独立文件输出，不内联为 base64
  *   （便于 Service Worker 按 URL 缓存，提升缓存粒度和复用率）

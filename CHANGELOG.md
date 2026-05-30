@@ -4,7 +4,7 @@
 
 ### 新增
 
-- **Android 构建图标修复**：GitHub Actions 构建前新增 `bun tauri icon public/potted_plant_3d.png --ci` 步骤，从源 PNG 生成全平台图标（含 Android mipmap）。自此 Android APK 打包时可正确获取应用图标
+- **Android 构建图标修复**：GitHub Actions 构建前新增 `bun tauri icon public/potted_plant_3d.png` 步骤，从源 PNG 生成全平台图标（含 Android mipmap）。自此 Android APK 打包时可正确获取应用图标
 - **Vue 错误边界**：`web/App.vue` 和 `desktop/App.vue` 添加 `onErrorCaptured` 钩子，子组件渲染异常时显示错误提示，防止整个应用白屏
 
 ### 修复
